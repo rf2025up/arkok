@@ -93,7 +93,12 @@ function App() {
     // Fetch students from backend API
     const fetchStudents = async () => {
       try {
-        const apiUrl = process.env.REACT_APP_API_URL || 'https://xysrxgjnpycd.sealoshzh.site/api';
+        // 自动检测 API 地址：开发环境用 localhost，生产环境用当前域名
+        const apiUrl = process.env.REACT_APP_API_URL || (() => {
+          const protocol = window.location.protocol;
+          const host = window.location.host;
+          return `${protocol}//${host}/api`;
+        })();
         const response = await fetch(`${apiUrl}/students`);
         const data = await response.json();
 
@@ -132,7 +137,12 @@ function App() {
 
   const handleUpdateScore = async (ids: string[], points: number, reason: string, exp?: number) => {
     try {
-      const apiUrl = process.env.REACT_APP_API_URL || 'https://xysrxgjnpycd.sealoshzh.site/api';
+      // 自动检测 API 地址
+      const apiUrl = process.env.REACT_APP_API_URL || (() => {
+        const protocol = window.location.protocol;
+        const host = window.location.host;
+        return `${protocol}//${host}/api`;
+      })();
 
       // 更新所有选中的学生
       for (const id of ids) {

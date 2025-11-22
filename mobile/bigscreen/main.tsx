@@ -11,7 +11,14 @@ import PKBoardCard from './components/PKBoardCard'
 import { Student, Team } from './types'
 import { getTeams } from './services/sealosService'
 
-const API_BASE_URL = 'https://xysrxgjnpycd.sealoshzh.site/api'
+// 自动检测 API 地址：开发环境用 localhost，生产环境用当前域名
+const getApiBaseUrl = () => {
+  const protocol = typeof window !== 'undefined' ? window.location.protocol : 'http:'
+  const host = typeof window !== 'undefined' ? window.location.host : 'localhost:3000'
+  return `${protocol}//${host}/api`
+}
+
+const API_BASE_URL = getApiBaseUrl()
 
 const App: React.FC = () => {
   const [students, setStudents] = useState<Student[]>([])
