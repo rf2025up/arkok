@@ -1,14 +1,496 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>星途成长方舟·大屏</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script type="module" crossorigin src="/assets/bigscreen-BJl7nfOY.js"></script>
-    <link rel="modulepreload" crossorigin href="/assets/client-C_2d_5tV.js">
-  </head>
-  <body class="bg-gray-900">
-    <div id="root"></div>
-  </body>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学生积分排行榜 - 大屏展示</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: #fff;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            max-width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            animation: slideDown 0.5s ease;
+        }
+
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .header h1 {
+            font-size: 48px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+            background: linear-gradient(90deg, #ffd700, #ffed4e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            animation: fadeIn 0.6s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .stat-label { font-size: 14px; color: rgba(255, 255, 255, 0.7); margin-bottom: 8px; }
+        .stat-value { font-size: 36px; font-weight: bold; color: #ffd700; }
+
+        .leaderboard-container {
+            flex: 1;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            overflow: auto;
+            padding-right: 10px;
+        }
+
+        .leaderboard {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        .leaderboard h2 {
+            font-size: 24px;
+            padding: 20px;
+            text-align: center;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .student-item {
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: all 0.3s ease;
+        }
+
+        .student-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateX(8px);
+        }
+
+        .student-item:last-child { border-bottom: none; }
+
+        .student-rank {
+            font-size: 24px;
+            font-weight: bold;
+            color: #ffd700;
+            min-width: 40px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .student-rank.top-1 {
+            font-size: 32px;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        .student-rank.top-2 { color: #c0c0c0; }
+        .student-rank.top-3 { color: #cd7f32; }
+
+        .student-info {
+            flex: 1;
+            margin: 0 20px;
+        }
+
+        .student-name {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .student-score {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .score-value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #00ff88;
+            text-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+            transition: color 0.4s ease;
+        }
+
+        .score-value.increase {
+            animation: scoreIncrease 0.6s ease;
+        }
+
+        @keyframes scoreIncrease {
+            0% { transform: scale(1); color: #00ff88; }
+            50% { transform: scale(1.3); color: #00ff88; }
+            100% { transform: scale(1); color: #00ff88; }
+        }
+
+        .score-value.decrease {
+            animation: scoreDecrease 0.6s ease;
+        }
+
+        @keyframes scoreDecrease {
+            0% { transform: scale(1); color: #ff6b6b; }
+            50% { transform: scale(0.8); color: #ff6b6b; }
+            100% { transform: scale(1); color: #00ff88; }
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+        }
+
+        .footer {
+            text-align: center;
+            padding: 15px;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.5);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .update-time {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .sync-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #00ff88;
+            margin-right: 8px;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+    </style>
+</head>
+<body>
+    <div class="update-time">
+        <span class="sync-indicator"></span>
+        <span id="updateTime">更新中...</span>
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <h1>🏆 学生积分排行榜</h1>
+        </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-label">总学生数</div>
+                <div class="stat-value" id="totalStudents">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">平均积分</div>
+                <div class="stat-value" id="avgScore">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">最高积分</div>
+                <div class="stat-value" id="maxScore">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">最低积分</div>
+                <div class="stat-value" id="minScore">0</div>
+            </div>
+        </div>
+
+        <div class="leaderboard-container" id="leaderboardContainer"></div>
+    </div>
+
+    <div class="footer">
+        <p>数据实时同步 • 智能更新（只刷新积分和排名） • 学生积分管理系统</p>
+    </div>
+
+    <script>
+        const API_URL = '/api';
+        let previousData = null;
+        let allGroups = [];
+        const studentElements = new Map();
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadGroups();
+            loadData();
+            setInterval(loadData, 2000);
+            setInterval(updateTimestamp, 1000);
+        });
+
+        async function loadGroups() {
+            try {
+                const response = await fetch(`${API_URL}/groups`);
+                const result = await response.json();
+                if (result.success) {
+                    allGroups = result.data.sort((a, b) => a.display_order - b.display_order);
+                }
+            } catch (error) {
+                console.error('Error loading groups:', error);
+            }
+        }
+
+        async function loadData() {
+            try {
+                const response = await fetch(`${API_URL}/students?sort=score&order=DESC`);
+                const result = await response.json();
+
+                if (result.success) {
+                    const students = result.data;
+                    updateDisplay(students);
+                    previousData = JSON.parse(JSON.stringify(students));
+                }
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+
+        function updateDisplay(students) {
+            const container = document.getElementById('leaderboardContainer');
+
+            if (studentElements.size === 0) {
+                createLeaderboards(container, students);
+            } else {
+                updateLeaderboards(students);
+            }
+
+            updateStats(students);
+        }
+
+        function createLeaderboards(container, students) {
+            container.innerHTML = '';
+            
+            if (allGroups.length === 0) {
+                createDefaultLeaderboard(container, students);
+            } else {
+                allGroups.forEach(group => {
+                    const groupStudents = students.filter(s => s.group_id === group.id);
+                    createGroupLeaderboard(container, group, groupStudents);
+                });
+            }
+        }
+
+        function createDefaultLeaderboard(container, students) {
+            const groupSize = Math.ceil(students.length / 3);
+
+            for (let i = 0; i < students.length; i += groupSize) {
+                const group = students.slice(i, i + groupSize);
+                const groupNum = Math.floor(i / groupSize) + 1;
+
+                const leaderboard = document.createElement('div');
+                leaderboard.className = 'leaderboard';
+
+                const header = document.createElement('h2');
+                header.textContent = `第 ${groupNum} 组`;
+                leaderboard.appendChild(header);
+
+                group.forEach((student, idx) => {
+                    const rank = i + idx + 1;
+                    const item = createStudentItem(student, rank);
+                    leaderboard.appendChild(item);
+                    studentElements.set(student.id, { element: item, rank });
+                });
+
+                container.appendChild(leaderboard);
+            }
+        }
+
+        function createGroupLeaderboard(container, group, students) {
+            const leaderboard = document.createElement('div');
+            leaderboard.className = 'leaderboard';
+            leaderboard.style.borderColor = `${group.color}80`;
+
+            const header = document.createElement('h2');
+            header.textContent = group.name;
+            header.style.background = `linear-gradient(90deg, ${group.color}, ${adjustColor(group.color, -30)})`;
+            leaderboard.appendChild(header);
+
+            students.forEach((student, idx) => {
+                const rank = idx + 1;
+                const item = createStudentItem(student, rank);
+                leaderboard.appendChild(item);
+                studentElements.set(student.id, { element: item, rank, groupId: group.id });
+            });
+
+            container.appendChild(leaderboard);
+        }
+
+        function adjustColor(color, percent) {
+            const num = parseInt(color.replace("#", ""), 16);
+            const amt = Math.round(2.55 * percent);
+            const R = Math.max(0, Math.min(255, (num >> 16) + amt));
+            const G = Math.max(0, Math.min(255, (num >> 8 & 0x00FF) + amt));
+            const B = Math.max(0, Math.min(255, (num & 0x0000FF) + amt));
+            return "#" + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).substring(1);
+        }
+
+        function createStudentItem(student, rank) {
+            let medalEmoji = '';
+            if (rank === 1) medalEmoji = '🥇';
+            else if (rank === 2) medalEmoji = '🥈';
+            else if (rank === 3) medalEmoji = '🥉';
+            else medalEmoji = `${rank}`;
+
+            const item = document.createElement('div');
+            item.className = 'student-item';
+            item.dataset.studentId = student.id;
+
+            const rankEl = document.createElement('div');
+            rankEl.className = `student-rank top-${rank <= 3 ? rank : 'n'}`;
+            rankEl.textContent = medalEmoji;
+            rankEl.dataset.rank = rank;
+
+            const info = document.createElement('div');
+            info.className = 'student-info';
+            info.innerHTML = `
+                <div class="student-name">${escapeHtml(student.name)}</div>
+                <div class="student-score">排名: 第 ${rank} 名</div>
+            `;
+
+            const scoreDisplay = document.createElement('div');
+            const scoreValue = document.createElement('div');
+            scoreValue.className = 'score-value';
+            scoreValue.textContent = student.score;
+            scoreValue.dataset.score = student.score;
+
+            const scoreUnit = document.createElement('div');
+            scoreUnit.style.fontSize = '14px';
+            scoreUnit.textContent = '分';
+
+            scoreDisplay.appendChild(scoreValue);
+            scoreDisplay.appendChild(scoreUnit);
+
+            item.appendChild(rankEl);
+            item.appendChild(info);
+            item.appendChild(scoreDisplay);
+
+            return item;
+        }
+
+        function updateLeaderboards(students) {
+            students.forEach((student, idx) => {
+                const rank = idx + 1;
+                const cached = studentElements.get(student.id);
+
+                if (cached) {
+                    const element = cached.element;
+                    const rankEl = element.querySelector('.student-rank');
+                    const scoreEl = element.querySelector('.score-value');
+                    const scoreInfo = element.querySelector('.student-score');
+
+                    if (cached.rank !== rank) {
+                        let medalEmoji = '';
+                        if (rank === 1) medalEmoji = '🥇';
+                        else if (rank === 2) medalEmoji = '🥈';
+                        else if (rank === 3) medalEmoji = '🥉';
+                        else medalEmoji = `${rank}`;
+
+                        rankEl.textContent = medalEmoji;
+                        rankEl.className = `student-rank top-${rank <= 3 ? rank : 'n'}`;
+                        rankEl.style.animation = 'none';
+                        setTimeout(() => { rankEl.style.animation = 'pulse 0.8s ease'; }, 10);
+
+                        scoreInfo.textContent = `排名: 第 ${rank} 名`;
+                        cached.rank = rank;
+                    }
+
+                    const oldScore = parseInt(scoreEl.dataset.score);
+                    if (oldScore !== student.score) {
+                        scoreEl.textContent = student.score;
+                        scoreEl.dataset.score = student.score;
+
+                        scoreEl.classList.remove('increase', 'decrease');
+
+                        if (student.score > oldScore) {
+                            scoreEl.classList.add('increase');
+                        } else if (student.score < oldScore) {
+                            scoreEl.classList.add('decrease');
+                        }
+
+                        void scoreEl.offsetWidth;
+                    }
+                }
+            });
+        }
+
+        function updateStats(students) {
+            const total = students.length;
+            const scores = students.map(s => s.score);
+            const avg = total > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / total) : 0;
+            const max = total > 0 ? Math.max(...scores) : 0;
+            const min = total > 0 ? Math.min(...scores) : 0;
+
+            document.getElementById('totalStudents').textContent = total;
+            document.getElementById('avgScore').textContent = avg;
+            document.getElementById('maxScore').textContent = max;
+            document.getElementById('minScore').textContent = min;
+        }
+
+        function updateTimestamp() {
+            const now = new Date();
+            const time = now.toLocaleTimeString('zh-CN', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            document.getElementById('updateTime').textContent = `${time}`;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        window.addEventListener('beforeunload', () => {
+            studentElements.clear();
+        });
+    </script>
+</body>
 </html>
