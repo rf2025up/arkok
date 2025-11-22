@@ -21,8 +21,10 @@ const TeamLeaderboard: React.FC<TeamLeaderboardProps> = ({ students, teams, sort
     teams.forEach(team => teamScores.set(team.id, 0));
 
     students.forEach(student => {
-      const currentScore = teamScores.get(student.team_id) || 0;
-      teamScores.set(student.team_id, currentScore + student[sortBy]);
+      // 使用 class_name 或 team_id 来分组学生
+      const studentTeamId = student.class_name || student.team_id || '未分配';
+      const currentScore = teamScores.get(studentTeamId) || 0;
+      teamScores.set(studentTeamId, currentScore + student[sortBy]);
     });
 
     const sortedTeams = Array.from(teamScores.entries())

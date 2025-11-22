@@ -1,7 +1,8 @@
 export interface Student {
   id: string;
   name: string;
-  team_id: string;
+  team_id?: string;
+  class_name?: string;
   total_exp: number;
   total_points: number;
   avatar_url: string;

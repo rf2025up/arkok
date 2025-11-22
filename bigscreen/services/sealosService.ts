@@ -20,7 +20,17 @@ export const getStudents = async (): Promise<Student[]> => {
     const response = await fetch(`${API_BASE_URL}/students`)
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const result = await response.json()
-    cachedData.students = result.data || []
+    // 映射 API 返回的学生数据到 Student 类型
+    cachedData.students = (result.data || []).map((s: any) => ({
+      id: String(s.id),
+      name: s.name,
+      team_id: s.team_id,
+      class_name: s.class_name || '未分配',
+      total_exp: s.total_exp || 0,
+      total_points: s.score || 0,
+      avatar_url: s.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(s.name)}`,
+      badges: s.badges || []
+    }))
     return cachedData.students
   } catch (error) {
     console.error('Failed to get students:', error)

@@ -34,18 +34,37 @@ const App: React.FC = () => {
         setConnectionStatus('connected')
 
         // Load initial data
-        const [t, s, c, p, tk] = await Promise.all([
-          getTeams(),
+        const [s, c, p, tk] = await Promise.all([
           getStudents(),
           getChallenges(),
           getPKs(7),
           getRecentTasks(7)
         ])
-        setTeams(t)
+
         setStudents(s)
         setChallenges(c)
         setPks(p)
         setTasks(tk)
+
+        // 从学生数据中提取班级信息，转换为 Team 格式
+        const classColors: Record<string, { color: string; textColor: string }> = {
+          '黄老师班': { color: 'bg-yellow-500', textColor: 'text-yellow-400' },
+          '姜老师班': { color: 'bg-red-500', textColor: 'text-red-400' },
+          '龙老师班': { color: 'bg-blue-500', textColor: 'text-blue-400' }
+        }
+
+        const uniqueClasses = Array.from(new Set(s.map(student => student.class_name || '未分配')))
+        const generatedTeams: Team[] = uniqueClasses.map((className, idx) => {
+          const colorKey = Object.keys(classColors)[idx] || className
+          const colorSet = classColors[colorKey] || { color: 'bg-gray-500', textColor: 'text-gray-400' }
+          return {
+            id: className,
+            name: className,
+            color: colorSet.color,
+            textColor: colorSet.textColor
+          }
+        })
+        setTeams(generatedTeams)
 
         // Subscribe to real-time updates
         unsubscribeStudent = subscribeToStudentChanges((updatedStudents) => {
