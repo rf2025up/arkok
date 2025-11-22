@@ -61,7 +61,7 @@ function App() {
     return lvl;
   };
   // Global State
-  const [students, setStudents] = useState<Student[]>(MOCK_STUDENTS);
+  const [students, setStudents] = useState<Student[]>([]);
   const [habits, setHabits] = useState<Habit[]>(MOCK_HABITS);
   
   // Lifted State for Class Management Features
@@ -161,21 +161,31 @@ function App() {
       }
 
       // 刷新学生列表以获取最新数据
-      const refreshResponse = await fetch(`${apiUrl}/students`);
-      const refreshData = await refreshResponse.json();
+      try {
+        const refreshResponse = await fetch(`${apiUrl}/students`);
+        if (!refreshResponse.ok) {
+          console.error('Failed to refresh students:', refreshResponse.statusText);
+          return;
+        }
+        const refreshData = await refreshResponse.json();
 
-      if (refreshData.success && Array.isArray(refreshData.data)) {
-        const arr = refreshData.data.map((apiStudent: any) => ({
-          id: String(apiStudent.id),
-          name: apiStudent.name,
-          avatar: apiStudent.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(apiStudent.name)}`,
-          points: apiStudent.score || 0,
-          exp: apiStudent.total_exp || 0,
-          level: apiStudent.level || 1,
-          className: apiStudent.class_name || '未分配',
-          habitStats: Object.fromEntries(MOCK_HABITS.map(h => [h.id, 0]))
-        }));
-        setStudents(arr);
+        if (refreshData.success && Array.isArray(refreshData.data)) {
+          const arr = refreshData.data.map((apiStudent: any) => ({
+            id: String(apiStudent.id),
+            name: apiStudent.name,
+            avatar: apiStudent.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(apiStudent.name)}`,
+            points: apiStudent.score || 0,
+            exp: apiStudent.total_exp || 0,
+            level: apiStudent.level || 1,
+            className: apiStudent.class_name || '未分配',
+            habitStats: Object.fromEntries(MOCK_HABITS.map(h => [h.id, 0]))
+          }));
+          setStudents(arr);
+        } else {
+          console.error('Invalid response format:', refreshData);
+        }
+      } catch (refreshError) {
+        console.error('Error refreshing students:', refreshError);
       }
     } catch (error) {
       console.error('Error updating scores:', error);
