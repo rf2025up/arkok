@@ -561,17 +561,62 @@ const ClassManage: React.FC<ClassManageProps> = ({
       URL.revokeObjectURL(url);
   };
 
-  const handleCreateStudent = () => {
+  const handleCreateStudent = async () => {
     const name = newStudentName.trim();
     if (!name) return;
     const cls = newStudentClass.trim() || '未知';
-    const id = `${Date.now()}`;
     const avatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}`;
-    setStudents(prev => [...prev, { id, name, avatar, points: 0, exp: 0, level: 1, className: cls, teamId: newStudentTeamId }]);
-    setIsAddStudentOpen(false);
-    setNewStudentName('');
-    setNewStudentClass('三年二班');
-    setNewStudentTeamId('');
+
+    try {
+      // 获取 API 地址
+      const protocol = window.location.protocol;
+      const host = window.location.host;
+      const apiUrl = `${protocol}//${host}/api`;
+
+      // 调用后端 API 创建学生
+      const response = await fetch(`${apiUrl}/students`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          class_name: cls,
+          avatar_url: avatar,
+          score: 0,
+          total_exp: 0,
+          level: 1
+        })
+      });
+
+      if (!response.ok) {
+        console.error('Failed to create student:', response.statusText);
+        return;
+      }
+
+      const data = await response.json();
+
+      if (data.success && data.data) {
+        // 使用数据库返回的学生数据更新前端状态
+        const newStudent = {
+          id: String(data.data.id),
+          name: data.data.name,
+          avatar: data.data.avatar_url || avatar,
+          points: data.data.score || 0,
+          exp: data.data.total_exp || 0,
+          level: data.data.level || 1,
+          className: data.data.class_name || cls,
+          teamId: newStudentTeamId || undefined
+        };
+        setStudents(prev => [...prev, newStudent]);
+        setIsAddStudentOpen(false);
+        setNewStudentName('');
+        setNewStudentClass('三年二班');
+        setNewStudentTeamId('');
+      } else {
+        console.error('Invalid response from server:', data);
+      }
+    } catch (error) {
+      console.error('Error creating student:', error);
+    }
   }
 
   const handleSaveStudentName = async (newName: string) => {

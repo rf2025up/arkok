@@ -145,6 +145,44 @@ app.get('/api/students', async (req, res) => {
 });
 
 /**
+ * 创建新学生
+ */
+app.post('/api/students', async (req, res) => {
+  try {
+    const { name, class_name, avatar_url, score = 0, total_exp = 0, level = 1 } = req.body;
+
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        error: 'Student name is required',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO students (name, class_name, avatar_url, score, total_exp, level)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, name, score, total_exp, level, class_name, avatar_url`,
+      [name, class_name || '未分配', avatar_url || '', score, total_exp, level]
+    );
+
+    res.status(201).json({
+      success: true,
+      data: result.rows[0],
+      message: 'Student created successfully',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error creating student:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
  * 获取单个学生数据
  */
 app.get('/api/students/:id', async (req, res) => {
