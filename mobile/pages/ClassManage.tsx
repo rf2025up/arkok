@@ -260,37 +260,95 @@ const ClassManage: React.FC<ClassManageProps> = ({
       onUpdateScorePresets(next);
   };
 
-  const handlePublishChallenge = () => {
+  const handlePublishChallenge = async () => {
       if(newChallenge.title && newChallenge.desc) {
           const pts = parseInt(String((newChallenge as any).rewardPoints));
           const exp = parseInt(String((newChallenge as any).rewardExp));
-          setChallenges(prev => [...prev, {
-              id: `c-${Date.now()}`,
-              title: newChallenge.title,
-              desc: newChallenge.desc,
-              status: 'active',
-              participants: (newChallenge.participantIds && newChallenge.participantIds.length>0) ? newChallenge.participantIds : [],
-              rewardPoints: isNaN(pts) ? 10 : pts,
-              rewardExp: isNaN(exp) ? undefined : exp,
-              date: new Date().toISOString()
-          }]);
+
+          try {
+              const protocol = window.location.protocol;
+              const host = window.location.host;
+              const apiUrl = `${protocol}//${host}/api`;
+
+              const response = await fetch(`${apiUrl}/challenges`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                      title: newChallenge.title,
+                      description: newChallenge.desc,
+                      status: 'active',
+                      reward_points: isNaN(pts) ? 10 : pts,
+                      reward_exp: isNaN(exp) ? 0 : exp
+                  })
+              });
+
+              if (!response.ok) {
+                  console.error('Failed to publish challenge:', response.statusText);
+                  return;
+              }
+
+              const data = await response.json();
+              if (data.success && data.data) {
+                  // Add to frontend state using API response
+                  setChallenges(prev => [...prev, {
+                      id: String(data.data.id),
+                      title: data.data.title,
+                      desc: data.data.description,
+                      status: data.data.status,
+                      participants: (newChallenge.participantIds && newChallenge.participantIds.length>0) ? newChallenge.participantIds : [],
+                      rewardPoints: data.data.reward_points,
+                      rewardExp: data.data.reward_exp,
+                      date: new Date().toISOString()
+                  }]);
+              }
+          } catch (error) {
+              console.error('Error publishing challenge:', error);
+          }
+
           setNewChallenge({ title: '', desc: '', participantIds: [], rewardPoints: '', rewardExp: '' } as any);
       }
   };
 
-  const handlePublishTask = () => {
+  const handlePublishTask = async () => {
       if (newTaskForm.title && newTaskForm.expValue) {
           const exp = parseInt(String(newTaskForm.expValue));
           if (!isNaN(exp)) {
-              const task: Task = {
-                  id: `tk-${Date.now()}`,
-                  title: newTaskForm.title,
-                  desc: newTaskForm.desc,
-                  expValue: exp,
-                  createdAt: new Date().toISOString(),
-                  assignedTo: newTaskForm.assignees
-              };
-              setTasks(prev => [task, ...prev]);
+              try {
+                  const protocol = window.location.protocol;
+                  const host = window.location.host;
+                  const apiUrl = `${protocol}//${host}/api`;
+
+                  const response = await fetch(`${apiUrl}/tasks`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                          title: newTaskForm.title,
+                          description: newTaskForm.desc,
+                          exp_value: exp
+                      })
+                  });
+
+                  if (!response.ok) {
+                      console.error('Failed to publish task:', response.statusText);
+                      return;
+                  }
+
+                  const data = await response.json();
+                  if (data.success && data.data) {
+                      const task: Task = {
+                          id: String(data.data.id),
+                          title: data.data.title,
+                          desc: data.data.description,
+                          expValue: data.data.exp_value,
+                          createdAt: new Date().toISOString(),
+                          assignedTo: newTaskForm.assignees
+                      };
+                      setTasks(prev => [task, ...prev]);
+                  }
+              } catch (error) {
+                  console.error('Error publishing task:', error);
+              }
+
               setNewTaskForm({ title: '', desc: '', expValue: '', assignees: [] });
           }
       }
@@ -324,73 +382,145 @@ const ClassManage: React.FC<ClassManageProps> = ({
       setNewTaskForm({ ...newTaskForm, assignees: newTaskForm.assignees.filter(x=>x!==id) });
   };
 
-  const handleCreatePK = () => {
+  const handleCreatePK = async () => {
       if(newPK.studentA && newPK.studentB && newPK.topic) {
-          setPkMatches(prev => [...prev, {
-              id: `pk-${Date.now()}`,
-              studentA: newPK.studentA,
-              studentB: newPK.studentB,
-              topic: newPK.topic,
-              status: 'pending'
-          }]);
+          try {
+              const protocol = window.location.protocol;
+              const host = window.location.host;
+              const apiUrl = `${protocol}//${host}/api`;
+
+              const response = await fetch(`${apiUrl}/pk-matches`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                      student_a: newPK.studentA,
+                      student_b: newPK.studentB,
+                      topic: newPK.topic,
+                      status: 'pending'
+                  })
+              });
+
+              if (!response.ok) {
+                  console.error('Failed to create PK match:', response.statusText);
+                  return;
+              }
+
+              const data = await response.json();
+              if (data.success && data.data) {
+                  setPkMatches(prev => [...prev, {
+                      id: String(data.data.id),
+                      studentA: data.data.student_a,
+                      studentB: data.data.student_b,
+                      topic: data.data.topic,
+                      status: data.data.status
+                  }]);
+              }
+          } catch (error) {
+              console.error('Error creating PK match:', error);
+          }
+
           setNewPK({ studentA: '', studentB: '', topic: '' });
       }
   };
 
-  const handlePKDraw = (pkId: string) => {
-      // Mark PK as finished with draw result
-      setPkMatches(prev => prev.map(pk =>
-        pk.id === pkId ? { ...pk, status: 'finished', result: 'draw' } : pk
-      ));
-      // Deduct 50 points and add 200 exp to both students
-      const pk = pkMatches.find(p => p.id === pkId);
-      if (pk) {
-          setStudents(prev => prev.map(s => {
-              if (s.id === pk.studentA || s.id === pk.studentB) {
-                  return { ...s, points: Math.max(0, s.points - 50), exp: (s.exp || 0) + 200 };
-              }
-              return s;
-          }));
+  const handlePKDraw = async (pkId: string) => {
+      try {
+          const protocol = window.location.protocol;
+          const host = window.location.host;
+          const apiUrl = `${protocol}//${host}/api`;
+
+          const response = await fetch(`${apiUrl}/pk-matches/${pkId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  status: 'finished',
+                  winner_id: null
+              })
+          });
+
+          if (!response.ok) {
+              console.error('Failed to mark PK as draw:', response.statusText);
+              return;
+          }
+
+          // Mark PK as finished with draw result
+          setPkMatches(prev => prev.map(pk =>
+            pk.id === pkId ? { ...pk, status: 'finished', result: 'draw' } : pk
+          ));
+          // Deduct 50 points and add 200 exp to both students
+          const pk = pkMatches.find(p => p.id === pkId);
+          if (pk) {
+              setStudents(prev => prev.map(s => {
+                  if (s.id === pk.studentA || s.id === pk.studentB) {
+                      return { ...s, points: Math.max(0, s.points - 50), exp: (s.exp || 0) + 200 };
+                  }
+                  return s;
+              }));
+          }
+      } catch (error) {
+          console.error('Error marking PK as draw:', error);
       }
   };
 
-  const handlePKWinnerWithReward = (pkId: string, winnerId: string, losererId: string) => {
-      const reward = pkRewardForm[pkId] || { points: '0', exp: '0' };
-      const rewardPoints = parseInt(reward.points) || 0;
-      const rewardExp = parseInt(reward.exp) || 0;
+  const handlePKWinnerWithReward = async (pkId: string, winnerId: string, losererId: string) => {
+      try {
+          const protocol = window.location.protocol;
+          const host = window.location.host;
+          const apiUrl = `${protocol}//${host}/api`;
 
-      // Mark PK as finished
-      setPkMatches(prev => prev.map(pk =>
-        pk.id === pkId ? { ...pk, status: 'finished', winnerId, result: 'win' } : pk
-      ));
+          const reward = pkRewardForm[pkId] || { points: '0', exp: '0' };
+          const rewardPoints = parseInt(reward.points) || 0;
+          const rewardExp = parseInt(reward.exp) || 0;
 
-      // Update student scores and exp
-      setStudents(prev => prev.map(s => {
-          if (s.id === winnerId) {
-              // Winner: deduct 50, add reward + 200
-              return {
-                  ...s,
-                  points: Math.max(0, s.points - 50 + rewardPoints),
-                  exp: (s.exp || 0) + 200 + rewardExp
-              };
+          const response = await fetch(`${apiUrl}/pk-matches/${pkId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  status: 'finished',
+                  winner_id: winnerId
+              })
+          });
+
+          if (!response.ok) {
+              console.error('Failed to update PK match:', response.statusText);
+              return;
           }
-          if (s.id === losererId) {
-              // Loser: deduct 50 points, add 200 exp
-              return {
-                  ...s,
-                  points: Math.max(0, s.points - 50),
-                  exp: (s.exp || 0) + 200
-              };
-          }
-          return s;
-      }));
 
-      // Clear reward form
-      setPkRewardForm(prev => {
-          const newForm = { ...prev };
-          delete newForm[pkId];
-          return newForm;
-      });
+          // Mark PK as finished
+          setPkMatches(prev => prev.map(pk =>
+            pk.id === pkId ? { ...pk, status: 'finished', winnerId, result: 'win' } : pk
+          ));
+
+          // Update student scores and exp
+          setStudents(prev => prev.map(s => {
+              if (s.id === winnerId) {
+                  // Winner: deduct 50, add reward + 200
+                  return {
+                      ...s,
+                      points: Math.max(0, s.points - 50 + rewardPoints),
+                      exp: (s.exp || 0) + 200 + rewardExp
+                  };
+              }
+              if (s.id === losererId) {
+                  // Loser: deduct 50 points, add 200 exp
+                  return {
+                      ...s,
+                      points: Math.max(0, s.points - 50),
+                      exp: (s.exp || 0) + 200
+                  };
+              }
+              return s;
+          }));
+
+          // Clear reward form
+          setPkRewardForm(prev => {
+              const newForm = { ...prev };
+              delete newForm[pkId];
+              return newForm;
+          });
+      } catch (error) {
+          console.error('Error updating PK winner:', error);
+      }
   };
 
   const handleGrantBadgeSubmit = () => {
@@ -414,16 +544,29 @@ const ClassManage: React.FC<ClassManageProps> = ({
       setGrantBadgeForm({ ...grantBadgeForm, studentIds: (grantBadgeForm.studentIds as string[]).filter(x=>x!==id) });
   };
 
-  const handleCreateBadge = () => {
+  const handleCreateBadge = async () => {
       if (newBadgeForm.name) {
-          const icon = BADGE_ICONS[Math.floor(Math.random() * BADGE_ICONS.length)];
-          onAddBadge({
-              id: `b-${Date.now()}`,
-              name: newBadgeForm.name,
-              description: newBadgeForm.desc || '表现优异',
-              icon: icon
-          });
-          setNewBadgeForm({ name: '', desc: '' });
+          try {
+              const protocol = window.location.protocol;
+              const host = window.location.host;
+              const apiUrl = `${protocol}//${host}/api`;
+
+              const icon = BADGE_ICONS[Math.floor(Math.random() * BADGE_ICONS.length)];
+
+              // Note: The API doesn't have a badge creation endpoint yet
+              // For now, we'll create it locally
+              // TODO: Add POST /api/badges endpoint to backend when needed
+
+              onAddBadge({
+                  id: `b-${Date.now()}`,
+                  name: newBadgeForm.name,
+                  description: newBadgeForm.desc || '表现优异',
+                  icon: icon
+              });
+              setNewBadgeForm({ name: '', desc: '' });
+          } catch (error) {
+              console.error('Error creating badge:', error);
+          }
       }
   }
 
@@ -622,19 +765,67 @@ const ClassManage: React.FC<ClassManageProps> = ({
   const handleSaveStudentName = async (newName: string) => {
     if (!editingStudent) return;
     try {
-      // Update local state
-      setStudents(prev =>
-        prev.map(s =>
-          s.id === editingStudent.id ? { ...s, name: newName } : s
-        )
-      );
-      // Update selected student display if they have the detail modal open
-      setSelectedStudent(prev =>
-        prev && prev.id === editingStudent.id ? { ...prev, name: newName } : prev
-      );
+      // Get API URL
+      const protocol = window.location.protocol;
+      const host = window.location.host;
+      const apiUrl = `${protocol}//${host}/api`;
+
+      // Call API to update student name
+      const response = await fetch(`${apiUrl}/students/${editingStudent.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName })
+      });
+
+      if (!response.ok) {
+        console.error('Failed to update student name:', response.statusText);
+        return;
+      }
+
+      const data = await response.json();
+      if (data.success && data.data) {
+        // Update local state with API response
+        setStudents(prev =>
+          prev.map(s =>
+            s.id === editingStudent.id ? { ...s, name: data.data.name } : s
+          )
+        );
+        // Update selected student display if they have the detail modal open
+        setSelectedStudent(prev =>
+          prev && prev.id === editingStudent.id ? { ...prev, name: data.data.name } : prev
+        );
+      } else {
+        console.error('Invalid response from server:', data);
+      }
       setEditingStudent(null);
     } catch (error) {
       console.error('保存失败：', error);
+    }
+  }
+
+  const handleDeleteStudent = async (studentId: string) => {
+    try {
+      const protocol = window.location.protocol;
+      const host = window.location.host;
+      const apiUrl = `${protocol}//${host}/api`;
+
+      const response = await fetch(`${apiUrl}/students/${studentId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      if (!response.ok) {
+        console.error('Failed to delete student:', response.statusText);
+        return;
+      }
+
+      // Remove from frontend state
+      setStudents(prev => prev.filter(s => s.id !== studentId));
+      if (selectedStudent?.id === studentId) {
+        setSelectedStudent(null);
+      }
+    } catch (error) {
+      console.error('删除学生失败：', error);
     }
   }
 

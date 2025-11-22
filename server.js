@@ -604,6 +604,38 @@ app.get('/api/tasks', async (req, res) => {
 });
 
 /**
+ * 删除任务
+ */
+app.delete('/api/tasks/:id', async (req, res) => {
+  try {
+    const taskId = parseInt(req.params.id);
+
+    const result = await pool.query('DELETE FROM tasks WHERE id = $1 RETURNING id', [taskId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Task not found',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Task deleted successfully',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error deleting task:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
  * 颁发勋章
  */
 app.post('/api/students/:student_id/badges/:badge_id', async (req, res) => {

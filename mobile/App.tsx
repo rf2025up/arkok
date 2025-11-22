@@ -218,103 +218,181 @@ function App() {
   };
 
   // New Handler: Update Challenge Status (Success/Fail)
-  const handleChallengeStatus = (id: string, result: 'success' | 'fail') => {
-      setChallenges(prev => prev.map(c => {
-          if (c.id === id) {
-              if (result === 'success' && c.status === 'active') {
-                  handleUpdateScore(c.participants, c.rewardPoints, `挑战成功: ${c.title}`, c.rewardExp);
+  const handleChallengeStatus = async (id: string, result: 'success' | 'fail') => {
+      try {
+          const protocol = window.location.protocol;
+          const host = window.location.host;
+          const apiUrl = `${protocol}//${host}/api`;
+
+          // Call API to update challenge status
+          const response = await fetch(`${apiUrl}/challenges/${id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: 'completed', result })
+          });
+
+          if (!response.ok) {
+              console.error('Failed to update challenge status:', response.statusText);
+              return;
+          }
+
+          setChallenges(prev => prev.map(c => {
+              if (c.id === id) {
+                  if (result === 'success' && c.status === 'active') {
+                      handleUpdateScore(c.participants, c.rewardPoints, `挑战成功: ${c.title}`, c.rewardExp);
+                  }
+                  return { ...c, status: 'completed', result };
               }
-              return { ...c, status: 'completed', result };
+              return c;
+          }));
+          const ch = challenges.find(c => c.id === id);
+          if (ch) {
+            setStudents(prev => prev.map(s => {
+              if (ch.participants.includes(s.id)) {
+                const rec = {
+                  id: ch.id,
+                  title: ch.title,
+                  result,
+                  points: result === 'success' ? ch.rewardPoints : 0,
+                  exp: result === 'success' ? ch.rewardExp : undefined,
+                  date: new Date().toISOString()
+                };
+                const bonusMin = Math.floor((ch.rewardExp || 0) * 0.10);
+                const bonusMax = Math.floor((ch.rewardExp || 0) * 0.30);
+                const bonus = result === 'success' ? Math.floor(Math.random() * (bonusMax - bonusMin + 1)) + bonusMin : 0;
+                const newExp = s.exp + bonus;
+                const newLevel = calcLevelFromExp(newExp);
+                return { ...s, exp: newExp, level: newLevel, challengeHistory: [ ...(s.challengeHistory || []), rec ] };
+              }
+              return s;
+            }));
           }
-          return c;
-      }));
-      const ch = challenges.find(c => c.id === id);
-      if (ch) {
-        setStudents(prev => prev.map(s => {
-          if (ch.participants.includes(s.id)) {
-            const rec = {
-              id: ch.id,
-              title: ch.title,
-              result,
-              points: result === 'success' ? ch.rewardPoints : 0,
-              exp: result === 'success' ? ch.rewardExp : undefined,
-              date: new Date().toISOString()
-            };
-            const bonusMin = Math.floor((ch.rewardExp || 0) * 0.10);
-            const bonusMax = Math.floor((ch.rewardExp || 0) * 0.30);
-            const bonus = result === 'success' ? Math.floor(Math.random() * (bonusMax - bonusMin + 1)) + bonusMin : 0;
-            const newExp = s.exp + bonus;
-            const newLevel = calcLevelFromExp(newExp);
-            return { ...s, exp: newExp, level: newLevel, challengeHistory: [ ...(s.challengeHistory || []), rec ] };
-          }
-          return s;
-        }));
+      } catch (error) {
+          console.error('Error updating challenge status:', error);
       }
   };
 
   // New Handler: Update PK Winner
-  const handlePKWinner = (id: string, winnerId: string) => {
-      setPkMatches(prev => prev.map(pk => {
-          if (pk.id === id) {
-              const loserId = pk.studentA === winnerId ? pk.studentB : pk.studentA;
-              handleUpdateScore([winnerId], 20, `PK获胜: ${pk.topic}`);
-              handleUpdateScore([loserId], 5, `PK参与: ${pk.topic}`); // Consolation points
-              return { ...pk, status: 'finished', winnerId };
-          }
-          return pk;
-      }));
+  const handlePKWinner = async (id: string, winnerId: string) => {
+      try {
+          const protocol = window.location.protocol;
+          const host = window.location.host;
+          const apiUrl = `${protocol}//${host}/api`;
 
-      const pk = pkMatches.find(p => p.id === id);
-      if (pk) {
-        const date = new Date().toISOString();
-        setStudents(prev => prev.map(s => {
-          if (s.id === pk.studentA || s.id === pk.studentB) {
-            const opponentId = s.id === pk.studentA ? pk.studentB : pk.studentA;
-            const opponentName = prev.find(x => x.id === opponentId)?.name;
-            const result: 'win' | 'lose' = s.id === winnerId ? 'win' : 'lose';
-            const rec = { id: `${id}-${s.id}`, pkId: id, topic: pk.topic, opponentId, opponentName, result, date };
-            const need = expForLevel(s.level);
-            const pkExp = Math.floor(need * 0.05);
-            const newExp = s.exp + pkExp;
-            const newLevel = calcLevelFromExp(newExp);
-            return { ...s, exp: newExp, level: newLevel, pkHistory: [ ...(s.pkHistory || []), rec ] };
+          // Call API to update PK winner
+          const response = await fetch(`${apiUrl}/pk-matches/${id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: 'finished', winner_id: winnerId })
+          });
+
+          if (!response.ok) {
+              console.error('Failed to update PK winner:', response.statusText);
+              return;
           }
-          return s;
-        }));
+
+          setPkMatches(prev => prev.map(pk => {
+              if (pk.id === id) {
+                  const loserId = pk.studentA === winnerId ? pk.studentB : pk.studentA;
+                  handleUpdateScore([winnerId], 20, `PK获胜: ${pk.topic}`);
+                  handleUpdateScore([loserId], 5, `PK参与: ${pk.topic}`); // Consolation points
+                  return { ...pk, status: 'finished', winnerId };
+              }
+              return pk;
+          }));
+
+          const pk = pkMatches.find(p => p.id === id);
+          if (pk) {
+            const date = new Date().toISOString();
+            setStudents(prev => prev.map(s => {
+              if (s.id === pk.studentA || s.id === pk.studentB) {
+                const opponentId = s.id === pk.studentA ? pk.studentB : pk.studentA;
+                const opponentName = prev.find(x => x.id === opponentId)?.name;
+                const result: 'win' | 'lose' = s.id === winnerId ? 'win' : 'lose';
+                const rec = { id: `${id}-${s.id}`, pkId: id, topic: pk.topic, opponentId, opponentName, result, date };
+                const need = expForLevel(s.level);
+                const pkExp = Math.floor(need * 0.05);
+                const newExp = s.exp + pkExp;
+                const newLevel = calcLevelFromExp(newExp);
+                return { ...s, exp: newExp, level: newLevel, pkHistory: [ ...(s.pkHistory || []), rec ] };
+              }
+              return s;
+            }));
+          }
+      } catch (error) {
+          console.error('Error updating PK winner:', error);
       }
   };
 
-  const handleCompleteTask = (id: string) => {
-      const task = tasks.find(t => t.id === id);
-      if (!task) return;
-      const date = new Date().toISOString();
-      // award exp and record history
-      setStudents(prev => prev.map(s => {
-          if (task.assignedTo?.includes(s.id)) {
-              const newExp = s.exp + task.expValue;
-              const newLevel = calcLevelFromExp(newExp);
-              const rec = { id: `${id}-${s.id}`, taskId: id, title: task.title, exp: task.expValue, date };
-              return { ...s, exp: newExp, level: newLevel, taskHistory: [ ...(s.taskHistory || []), rec ] };
+  const handleCompleteTask = async (id: string) => {
+      try {
+          const protocol = window.location.protocol;
+          const host = window.location.host;
+          const apiUrl = `${protocol}//${host}/api`;
+
+          // Call API to delete/complete task
+          const response = await fetch(`${apiUrl}/tasks/${id}`, {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' }
+          });
+
+          if (!response.ok) {
+              console.error('Failed to complete task:', response.statusText);
+              return;
           }
-          return s;
-      }));
-      // remove from active tasks
-      setTasks(prev => prev.filter(t => t.id !== id));
+
+          const task = tasks.find(t => t.id === id);
+          if (!task) return;
+          const date = new Date().toISOString();
+          // award exp and record history
+          setStudents(prev => prev.map(s => {
+              if (task.assignedTo?.includes(s.id)) {
+                  const newExp = s.exp + task.expValue;
+                  const newLevel = calcLevelFromExp(newExp);
+                  const rec = { id: `${id}-${s.id}`, taskId: id, title: task.title, exp: task.expValue, date };
+                  return { ...s, exp: newExp, level: newLevel, taskHistory: [ ...(s.taskHistory || []), rec ] };
+              }
+              return s;
+          }));
+          // remove from active tasks
+          setTasks(prev => prev.filter(t => t.id !== id));
+      } catch (error) {
+          console.error('Error completing task:', error);
+      }
   };
 
   // New Handler: Grant Badge
-  const handleBadgeGrant = (badgeId: string, studentId: string) => {
-      const badge = badges.find(b => b.id === badgeId);
-      if (badge) {
-          handleUpdateScore([studentId], 50, `获得勋章: ${badge.name}`, 200);
-          const date = new Date().toISOString();
-          setStudents(prev => prev.map(s => {
-            if (s.id === studentId) {
-              const rec = { id: `${badgeId}-${date}`, badgeId, name: badge.name, date };
-              return { ...s, badgeHistory: [ ...(s.badgeHistory || []), rec ] };
-            }
-            return s;
-          }));
+  const handleBadgeGrant = async (badgeId: string, studentId: string) => {
+      try {
+          const protocol = window.location.protocol;
+          const host = window.location.host;
+          const apiUrl = `${protocol}//${host}/api`;
+
+          // Call API to award badge
+          const response = await fetch(`${apiUrl}/students/${studentId}/badges/${badgeId}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' }
+          });
+
+          if (!response.ok) {
+              console.error('Failed to award badge:', response.statusText);
+              return;
+          }
+
+          const badge = badges.find(b => b.id === badgeId);
+          if (badge) {
+              handleUpdateScore([studentId], 50, `获得勋章: ${badge.name}`, 200);
+              const date = new Date().toISOString();
+              setStudents(prev => prev.map(s => {
+                if (s.id === studentId) {
+                  const rec = { id: `${badgeId}-${date}`, badgeId, name: badge.name, date };
+                  return { ...s, badgeHistory: [ ...(s.badgeHistory || []), rec ] };
+                }
+                return s;
+              }));
+          }
+      } catch (error) {
+          console.error('Error awarding badge:', error);
       }
   };
 
