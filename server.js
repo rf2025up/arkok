@@ -262,6 +262,408 @@ app.post('/api/students/:id/adjust-score', async (req, res) => {
   }
 });
 
+/**
+ * 编辑学生信息
+ */
+app.put('/api/students/:id', async (req, res) => {
+  try {
+    const studentId = parseInt(req.params.id);
+    const { name, class_name, avatar_url, score, total_exp, level, team_id } = req.body;
+
+    // 构建动态更新语句
+    const updates = [];
+    const values = [];
+    let paramIndex = 1;
+
+    if (name !== undefined) {
+      updates.push(`name = $${paramIndex++}`);
+      values.push(name);
+    }
+    if (class_name !== undefined) {
+      updates.push(`class_name = $${paramIndex++}`);
+      values.push(class_name);
+    }
+    if (avatar_url !== undefined) {
+      updates.push(`avatar_url = $${paramIndex++}`);
+      values.push(avatar_url);
+    }
+    if (score !== undefined) {
+      updates.push(`score = $${paramIndex++}`);
+      values.push(score);
+    }
+    if (total_exp !== undefined) {
+      updates.push(`total_exp = $${paramIndex++}`);
+      values.push(total_exp);
+    }
+    if (level !== undefined) {
+      updates.push(`level = $${paramIndex++}`);
+      values.push(level);
+    }
+    if (team_id !== undefined) {
+      updates.push(`team_id = $${paramIndex++}`);
+      values.push(team_id);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No fields to update',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    values.push(studentId);
+    const query = `UPDATE students SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING id, name, score, total_exp, level, class_name, avatar_url`;
+
+    const result = await pool.query(query, values);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Student not found',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    res.json({
+      success: true,
+      data: result.rows[0],
+      message: 'Student updated successfully',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error updating student:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * 删除学生
+ */
+app.delete('/api/students/:id', async (req, res) => {
+  try {
+    const studentId = parseInt(req.params.id);
+
+    // 先删除所有相关数据
+    await pool.query('DELETE FROM student_badges WHERE student_id = $1', [studentId]);
+    await pool.query('DELETE FROM habit_checkins WHERE student_id = $1', [studentId]);
+    await pool.query('DELETE FROM task_assignments WHERE student_id = $1', [studentId]);
+    await pool.query('DELETE FROM challenge_participants WHERE student_id = $1', [studentId]);
+    await pool.query('DELETE FROM score_history WHERE student_id = $1', [studentId]);
+
+    // 删除学生记录
+    const result = await pool.query('DELETE FROM students WHERE id = $1 RETURNING id', [studentId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Student not found',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Student deleted successfully',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error deleting student:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * 创建挑战
+ */
+app.post('/api/challenges', async (req, res) => {
+  try {
+    const { title, description, status = 'active', reward_points = 0, reward_exp = 0 } = req.body;
+
+    const result = await pool.query(
+      `INSERT INTO challenges (title, description, status, reward_points, reward_exp)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, title, description, status, reward_points, reward_exp`,
+      [title, description || '', status, reward_points, reward_exp]
+    );
+
+    res.status(201).json({
+      success: true,
+      data: result.rows[0],
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error creating challenge:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * 获取所有挑战
+ */
+app.get('/api/challenges', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT id, title, description, status, reward_points, reward_exp FROM challenges');
+    res.json({
+      success: true,
+      data: result.rows,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error fetching challenges:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * 更新挑战状态
+ */
+app.put('/api/challenges/:id', async (req, res) => {
+  try {
+    const challengeId = parseInt(req.params.id);
+    const { status, result } = req.body;
+
+    const updateResult = await pool.query(
+      'UPDATE challenges SET status = $1 WHERE id = $2 RETURNING id, title, description, status, reward_points, reward_exp',
+      [status || 'completed', challengeId]
+    );
+
+    if (updateResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Challenge not found',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    res.json({
+      success: true,
+      data: updateResult.rows[0],
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error updating challenge:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * 创建 PK 比赛
+ */
+app.post('/api/pk-matches', async (req, res) => {
+  try {
+    const { student_a, student_b, topic, status = 'pending' } = req.body;
+
+    const result = await pool.query(
+      `INSERT INTO pk_matches (student_a, student_b, topic, status)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, student_a, student_b, topic, status`,
+      [student_a, student_b, topic || '', status]
+    );
+
+    res.status(201).json({
+      success: true,
+      data: result.rows[0],
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error creating PK match:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * 获取所有 PK 比赛
+ */
+app.get('/api/pk-matches', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT id, student_a, student_b, topic, status, winner_id FROM pk_matches');
+    res.json({
+      success: true,
+      data: result.rows,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error fetching PK matches:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * 更新 PK 比赛结果
+ */
+app.put('/api/pk-matches/:id', async (req, res) => {
+  try {
+    const pkId = parseInt(req.params.id);
+    const { status, winner_id } = req.body;
+
+    const updateResult = await pool.query(
+      'UPDATE pk_matches SET status = $1, winner_id = $2 WHERE id = $3 RETURNING id, student_a, student_b, topic, status, winner_id',
+      [status || 'finished', winner_id || null, pkId]
+    );
+
+    if (updateResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'PK match not found',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    res.json({
+      success: true,
+      data: updateResult.rows[0],
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error updating PK match:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * 创建任务
+ */
+app.post('/api/tasks', async (req, res) => {
+  try {
+    const { title, description, exp_value = 0 } = req.body;
+
+    const result = await pool.query(
+      `INSERT INTO tasks (title, description, exp_value)
+       VALUES ($1, $2, $3)
+       RETURNING id, title, description, exp_value`,
+      [title, description || '', exp_value]
+    );
+
+    res.status(201).json({
+      success: true,
+      data: result.rows[0],
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error creating task:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * 获取所有任务
+ */
+app.get('/api/tasks', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT id, title, description, exp_value FROM tasks');
+    res.json({
+      success: true,
+      data: result.rows,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error fetching tasks:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * 颁发勋章
+ */
+app.post('/api/students/:student_id/badges/:badge_id', async (req, res) => {
+  try {
+    const studentId = parseInt(req.params.student_id);
+    const badgeId = parseInt(req.params.badge_id);
+
+    const result = await pool.query(
+      `INSERT INTO student_badges (student_id, badge_id, awarded_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT DO NOTHING
+       RETURNING student_id, badge_id`,
+      [studentId, badgeId]
+    );
+
+    res.status(201).json({
+      success: true,
+      data: result.rows[0] || { student_id: studentId, badge_id: badgeId },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error awarding badge:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * 习惯打卡
+ */
+app.post('/api/habits/:habit_id/checkin', async (req, res) => {
+  try {
+    const habitId = parseInt(req.params.habit_id);
+    const { student_id } = req.body;
+
+    const result = await pool.query(
+      `INSERT INTO habit_checkins (student_id, habit_id, checked_in_at)
+       VALUES ($1, $2, NOW())
+       RETURNING student_id, habit_id, checked_in_at`,
+      [student_id, habitId]
+    );
+
+    res.status(201).json({
+      success: true,
+      data: result.rows[0],
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error checking in habit:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // ============= WebSocket 处理 =============
 
 /**
