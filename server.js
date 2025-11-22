@@ -124,10 +124,14 @@ app.get('/api/students', async (req, res) => {
         s.level,
         s.class_name,
         s.avatar_url,
-        json_object_agg(h.id, COALESCE(COUNT(hc.id), 0)) as habit_stats
+        json_object_agg(h.id, COALESCE(hc_count.count, 0)) as habit_stats
       FROM students s
       LEFT JOIN habits h ON true
-      LEFT JOIN habit_checkins hc ON s.id = hc.student_id AND h.id = hc.habit_id
+      LEFT JOIN (
+        SELECT habit_id, student_id, COUNT(*) as count
+        FROM habit_checkins
+        GROUP BY habit_id, student_id
+      ) hc_count ON s.id = hc_count.student_id AND h.id = hc_count.habit_id
       GROUP BY s.id, s.name, s.score, s.total_exp, s.level, s.class_name, s.avatar_url
       ORDER BY s.score DESC
     `);
@@ -259,6 +263,67 @@ app.post('/api/students/:id/adjust-score', async (req, res) => {
     });
   } catch (error) {
     console.error('Error adjusting score:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * 批量添加分数和经验值 (多个学生)
+ */
+app.post('/api/students/scores/add', async (req, res) => {
+  try {
+    const { studentIds, points, exp, reason, category } = req.body;
+
+    if (!Array.isArray(studentIds) || studentIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'studentIds must be a non-empty array',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const updates = [];
+
+    // 为每个学生更新分数和经验
+    for (const studentId of studentIds) {
+      const parsedId = parseInt(studentId);
+
+      // 获取当前分数和经验
+      const currentResult = await pool.query(
+        `SELECT id, name, score, total_exp, level FROM students WHERE id = $1`,
+        [parsedId]
+      );
+
+      if (currentResult.rows.length === 0) {
+        console.warn(`Student ${studentId} not found, skipping`);
+        continue;
+      }
+
+      const student = currentResult.rows[0];
+      const newScore = (student.score || 0) + (points || 0);
+      const newExp = (student.total_exp || 0) + (exp || 0);
+
+      // 更新学生数据
+      const updateResult = await pool.query(
+        `UPDATE students SET score = $1, total_exp = $2 WHERE id = $3 RETURNING id, name, score, total_exp, level`,
+        [newScore, newExp, parsedId]
+      );
+
+      updates.push(updateResult.rows[0]);
+    }
+
+    res.json({
+      success: true,
+      data: updates,
+      message: `Updated ${updates.length} students: ${points || 0} points, ${exp || 0} experience`,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error adding scores:', error);
     res.status(500).json({
       success: false,
       error: error.message,
@@ -678,12 +743,21 @@ app.post('/api/habits/:habit_id/checkin', async (req, res) => {
   try {
     const habitId = parseInt(req.params.habit_id);
     const { student_id } = req.body;
+    const studentId = parseInt(student_id);
+
+    if (isNaN(studentId) || isNaN(habitId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid student_id or habit_id format',
+        timestamp: new Date().toISOString()
+      });
+    }
 
     const result = await pool.query(
       `INSERT INTO habit_checkins (student_id, habit_id, checked_in_at)
        VALUES ($1, $2, NOW())
        RETURNING student_id, habit_id, checked_in_at`,
-      [student_id, habitId]
+      [studentId, habitId]
     );
 
     res.status(201).json({
