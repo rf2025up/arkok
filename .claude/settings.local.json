@@ -39,7 +39,11 @@
       "Bash(__NEW_LINE__ printf \"📱 手机端 (/admin):\\n\" curl -s -I \"https://xysrxgjnpycd.sealoshzh.site/admin\")",
       "Bash(printf \"🖥️ 大屏端 (/display):\\n\" curl -s -I \"https://xysrxgjnpycd.sealoshzh.site/display\")",
       "Bash(printf \"🔌 API服务:\\n\" curl -s -I \"https://xysrxgjnpycd.sealoshzh.site/api/students\")",
-      "WebFetch(domain:xysrxgjnpycd.sealoshzh.site)"
+      "WebFetch(domain:xysrxgjnpycd.sealoshzh.site)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(printf:*)"
     ],
     "deny": [],
     "ask": []
