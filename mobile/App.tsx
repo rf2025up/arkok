@@ -112,7 +112,7 @@ function App() {
             exp: apiStudent.total_exp || 0,
             level: apiStudent.level || 1,
             className: apiStudent.class_name || '未分配',
-            habitStats: Object.fromEntries(MOCK_HABITS.map(h => [h.id, 0]))
+            habitStats: apiStudent.habit_stats || Object.fromEntries(MOCK_HABITS.map(h => [h.id, 0]))
           }));
           setStudents(arr);
 
@@ -214,25 +214,46 @@ function App() {
     }
   };
 
-  const handleHabitCheckIn = (studentIds: string[], habitId: string) => {
-      // 更新打卡数据到前端状态
-      setStudents(prevStudents =>
-        prevStudents.map(s => {
-          if (studentIds.includes(s.id)) {
-            return {
-              ...s,
-              habitStats: {
-                ...s.habitStats,
-                [habitId]: (s.habitStats?.[habitId] || 0) + 1
-              }
-            };
-          }
-          return s;
-        })
-      );
+  const handleHabitCheckIn = async (studentIds: string[], habitId: string) => {
+      try {
+        const protocol = window.location.protocol;
+        const host = window.location.host;
+        const apiUrl = `${protocol}//${host}/api`;
 
-      // 同时更新积分
-      handleUpdateScore(studentIds, 5, '习惯打卡');
+        // 对每个学生进行打卡
+        for (const studentId of studentIds) {
+          const response = await fetch(`${apiUrl}/habits/${habitId}/checkin`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ student_id: studentId })
+          });
+
+          if (!response.ok) {
+            console.error(`Failed to check in student ${studentId}:`, response.statusText);
+          }
+        }
+
+        // 更新打卡数据到前端状态
+        setStudents(prevStudents =>
+          prevStudents.map(s => {
+            if (studentIds.includes(s.id)) {
+              return {
+                ...s,
+                habitStats: {
+                  ...s.habitStats,
+                  [habitId]: (s.habitStats?.[habitId] || 0) + 1
+                }
+              };
+            }
+            return s;
+          })
+        );
+
+        // 同时更新积分
+        handleUpdateScore(studentIds, 5, '习惯打卡');
+      } catch (error) {
+        console.error('Error during habit check-in:', error);
+      }
   };
   
   const handleUpdateHabits = (newHabits: Habit[]) => {

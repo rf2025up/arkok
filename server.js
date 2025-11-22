@@ -117,15 +117,19 @@ app.get('/api/students', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT
-        id,
-        name,
-        score,
-        total_exp,
-        level,
-        class_name,
-        avatar_url
-      FROM students
-      ORDER BY score DESC
+        s.id,
+        s.name,
+        s.score,
+        s.total_exp,
+        s.level,
+        s.class_name,
+        s.avatar_url,
+        json_object_agg(h.id, COALESCE(COUNT(hc.id), 0)) as habit_stats
+      FROM students s
+      LEFT JOIN habits h ON true
+      LEFT JOIN habit_checkins hc ON s.id = hc.student_id AND h.id = hc.habit_id
+      GROUP BY s.id, s.name, s.score, s.total_exp, s.level, s.class_name, s.avatar_url
+      ORDER BY s.score DESC
     `);
 
     res.json({
