@@ -7,7 +7,6 @@ import ClassManage from './pages/ClassManage';
 import Habits from './pages/Habits';
 import Settings from './pages/Settings';
 
-import { MOCK_STUDENTS, MOCK_CHALLENGES, MOCK_TASKS, MOCK_PK, MOCK_BADGES, MOCK_HABITS, randomizeStudentNames, randomChineseName } from './services/mockData';
 import { POINT_PRESETS as INITIAL_PRESETS } from './constants';
 import { Student, Habit, PointPreset, ScoreCategory, Challenge, PKMatch, Badge, Task } from './types';
 
@@ -62,13 +61,13 @@ function App() {
   };
   // Global State
   const [students, setStudents] = useState<Student[]>([]);
-  const [habits, setHabits] = useState<Habit[]>(MOCK_HABITS);
-  
+  const [habits, setHabits] = useState<Habit[]>([]);
+
   // Lifted State for Class Management Features
-  const [challenges, setChallenges] = useState<Challenge[]>(MOCK_CHALLENGES);
-  const [pkMatches, setPkMatches] = useState<PKMatch[]>(MOCK_PK);
-  const [badges, setBadges] = useState<Badge[]>(MOCK_BADGES);
-  const [tasks, setTasks] = useState<Task[]>(MOCK_TASKS);
+  const [challenges, setChallenges] = useState<Challenge[]>([]);
+  const [pkMatches, setPkMatches] = useState<PKMatch[]>([]);
+  const [badges, setBadges] = useState<Badge[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [classes, setClasses] = useState<string[]>([]);
   const [identity, setIdentity] = useState<'teacher'|'principal'>('teacher');
   const [teacherClass, setTeacherClass] = useState<string>('');
@@ -90,8 +89,8 @@ function App() {
   }, []);
 
   useEffect(() => {
-    // Fetch students from backend API
-    const fetchStudents = async () => {
+    // Fetch students and habits from backend API
+    const fetchData = async () => {
       try {
         // 自动检测 API 地址：开发环境用 localhost，生产环境用当前域名
         const apiUrl = process.env.REACT_APP_API_URL || (() => {
@@ -99,12 +98,19 @@ function App() {
           const host = window.location.host;
           return `${protocol}//${host}/api`;
         })();
-        const response = await fetch(`${apiUrl}/students`);
-        const data = await response.json();
 
-        if (data.success && Array.isArray(data.data)) {
+        // 并行获取学生和习惯数据
+        const [studentsRes, habitsRes] = await Promise.all([
+          fetch(`${apiUrl}/students`),
+          fetch(`${apiUrl}/habits`)
+        ]);
+
+        const studentsData = await studentsRes.json();
+        const habitsData = await habitsRes.json();
+
+        if (studentsData.success && Array.isArray(studentsData.data)) {
           // Map API response to Student type
-          const arr: Student[] = data.data.map((apiStudent: any) => ({
+          const arr: Student[] = studentsData.data.map((apiStudent: any) => ({
             id: String(apiStudent.id),
             name: apiStudent.name,
             avatar: apiStudent.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(apiStudent.name)}`,
@@ -112,7 +118,7 @@ function App() {
             exp: apiStudent.total_exp || 0,
             level: apiStudent.level || 1,
             className: apiStudent.class_name || '未分配',
-            habitStats: apiStudent.habit_stats || Object.fromEntries(MOCK_HABITS.map(h => [h.id, 0]))
+            habitStats: apiStudent.habit_stats || {}
           }));
           setStudents(arr);
 
@@ -123,14 +129,26 @@ function App() {
             setTeacherClass(uniqueClasses[0]);
           }
         } else {
-          console.error('Failed to fetch students:', data);
+          console.error('Failed to fetch students:', studentsData);
+        }
+
+        // 获取习惯数据
+        if (habitsData.success && Array.isArray(habitsData.data)) {
+          const fetchedHabits: Habit[] = habitsData.data.map((apiHabit: any) => ({
+            id: String(apiHabit.id),
+            name: apiHabit.name,
+            icon: apiHabit.icon
+          }));
+          setHabits(fetchedHabits);
+        } else {
+          console.error('Failed to fetch habits:', habitsData);
         }
       } catch (error) {
-        console.error('Error fetching students:', error);
+        console.error('Error fetching data:', error);
       }
     };
 
-    fetchStudents();
+    fetchData();
     setPkMatches([]);
     setChallenges([]);
     setTasks([]);
@@ -181,7 +199,7 @@ function App() {
               exp: apiStudent.total_exp || 0,
               level: apiStudent.level || 1,
               className: apiStudent.class_name || '未分配',
-              habitStats: Object.fromEntries(MOCK_HABITS.map(h => [h.id, 0]))
+              habitStats: apiStudent.habit_stats || {}
             }));
             setStudents(arr);
             refreshSucceeded = true;
@@ -482,12 +500,13 @@ function App() {
           <Route 
             path="/class" 
             element={
-              <ClassManage 
+              <ClassManage
                 students={students}
                 challenges={challenges}
                 tasks={tasks}
                 pkMatches={pkMatches}
                 badges={badges}
+                habits={habits}
                 scorePresets={scorePresets}
                 categoryNames={categoryNames}
                 onUpdateScorePresets={handleUpdateScorePresets}

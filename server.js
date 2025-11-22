@@ -737,6 +737,27 @@ app.post('/api/students/:student_id/badges/:badge_id', async (req, res) => {
 });
 
 /**
+ * 获取所有习惯列表
+ */
+app.get('/api/habits', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT id, name, icon FROM habits ORDER BY id');
+    res.json({
+      success: true,
+      data: result.rows,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error fetching habits:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
  * 习惯打卡
  */
 app.post('/api/habits/:habit_id/checkin', async (req, res) => {

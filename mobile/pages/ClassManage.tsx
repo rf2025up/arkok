@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { Plus, Trophy, Swords, Medal, X, CheckCircle, ScrollText, Edit2, UserPlus, Trash2, Check } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { Student, Challenge, PKMatch, Badge, Task, ScoreCategory, PointPreset } from '../types';
-import { MOCK_HABITS, MOCK_TEAMS } from '../services/mockData';
+import { Student, Challenge, PKMatch, Badge, Task, ScoreCategory, PointPreset, Habit } from '../types';
 import { BADGE_ICONS } from '../constants';
 import StudentNameEditor from '../components/StudentNameEditor';
 
@@ -12,6 +11,7 @@ interface ClassManageProps {
   tasks: Task[];
   pkMatches: PKMatch[];
   badges: Badge[];
+  habits: Habit[];
   scorePresets: PointPreset[];
   categoryNames: Record<string, string>;
   onUpdateScorePresets: (presets: PointPreset[]) => void;
@@ -23,7 +23,7 @@ interface ClassManageProps {
   onPKWinner: (id: string, winnerId: string) => void;
   onGrantBadge: (badgeId: string, studentId: string) => void;
   onAddBadge: (badge: Badge) => void;
-  
+
   setChallenges: React.Dispatch<React.SetStateAction<Challenge[]>>;
   setPkMatches: React.Dispatch<React.SetStateAction<PKMatch[]>>;
   setStudents: React.Dispatch<React.SetStateAction<Student[]>>;
@@ -670,7 +670,7 @@ const ClassManage: React.FC<ClassManageProps> = ({
       const taskRows = [['任务名称','参与日期','完成','经验值'], ...((student.taskHistory||[]).filter(r=>inRange(r.date)).map(r=>[r.title, toDateStr(r.date), '是', String(r.exp||0)]))];
       const challengeRows = [['挑战名称','挑战日期','结果'], ...((student.challengeHistory||[]).filter(c=>inRange(c.date)).map(c=>[c.title, c.date?toDateStr(c.date):'', c.result||'']))];
       const pkRows = [['对手','主题','结果','日期'], ...((student.pkHistory||[]).filter(p=>inRange(p.date)).map(p=>[p.opponentName||p.opponentId, p.topic, p.result, toDateStr(p.date)]))];
-      const habitRows = [['习惯名称','打卡天数'], ...(MOCK_HABITS.map(h=>[h.name, String(student.habitStats?.[h.id]||0)]))];
+      const habitRows = [['习惯名称','打卡天数'], ...(habits.map(h=>[h.name, String(student.habitStats?.[h.id]||0)]))];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(infoRows), '个人信息');
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(badgeRows), '荣誉数据');
@@ -687,7 +687,7 @@ const ClassManage: React.FC<ClassManageProps> = ({
       const taskRows = (student.taskHistory||[]).filter(r=>inRange(r.date)).map(r=>[r.title, toDateStr(r.date), '是', String(r.exp||0)]);
       const challengeRows = (student.challengeHistory||[]).filter(c=>inRange(c.date)).map(c=>[c.title, c.date?toDateStr(c.date):'', c.result||'']);
       const pkRows = (student.pkHistory||[]).filter(p=>inRange(p.date)).map(p=>[p.opponentName||p.opponentId, p.topic, p.result, toDateStr(p.date)]);
-      const habitRows = MOCK_HABITS.map(h=>[h.name, String(student.habitStats?.[h.id]||0)]);
+      const habitRows = habits.map(h=>[h.name, String(student.habitStats?.[h.id]||0)]);
       const esc = (s: string) => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
       const table = (title: string, headers: string[], rows: string[][]) => `
         <h3 style="font-weight:bold;">${esc(title)}</h3>
@@ -976,7 +976,7 @@ const ClassManage: React.FC<ClassManageProps> = ({
                                  <CheckCircle size={16} className="mr-2 text-blue-500"/> 习惯统计
                              </h3>
                              {(() => {
-                               const pages = chunk((MOCK_HABITS || []), 9);
+                               const pages = chunk((habits || []), 9);
                                const page = Math.min(habitPage, Math.max(0, pages.length-1));
                                const pageItems = pages[page] || [];
                                return (
