@@ -161,31 +161,50 @@ function App() {
       }
 
       // 刷新学生列表以获取最新数据
+      let refreshSucceeded = false;
       try {
         const refreshResponse = await fetch(`${apiUrl}/students`);
         if (!refreshResponse.ok) {
           console.error('Failed to refresh students:', refreshResponse.statusText);
-          return;
-        }
-        const refreshData = await refreshResponse.json();
-
-        if (refreshData.success && Array.isArray(refreshData.data)) {
-          const arr = refreshData.data.map((apiStudent: any) => ({
-            id: String(apiStudent.id),
-            name: apiStudent.name,
-            avatar: apiStudent.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(apiStudent.name)}`,
-            points: apiStudent.score || 0,
-            exp: apiStudent.total_exp || 0,
-            level: apiStudent.level || 1,
-            className: apiStudent.class_name || '未分配',
-            habitStats: Object.fromEntries(MOCK_HABITS.map(h => [h.id, 0]))
-          }));
-          setStudents(arr);
         } else {
-          console.error('Invalid response format:', refreshData);
+          const refreshData = await refreshResponse.json();
+
+          if (refreshData.success && Array.isArray(refreshData.data)) {
+            const arr = refreshData.data.map((apiStudent: any) => ({
+              id: String(apiStudent.id),
+              name: apiStudent.name,
+              avatar: apiStudent.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(apiStudent.name)}`,
+              points: apiStudent.score || 0,
+              exp: apiStudent.total_exp || 0,
+              level: apiStudent.level || 1,
+              className: apiStudent.class_name || '未分配',
+              habitStats: Object.fromEntries(MOCK_HABITS.map(h => [h.id, 0]))
+            }));
+            setStudents(arr);
+            refreshSucceeded = true;
+          } else {
+            console.error('Invalid response format:', refreshData);
+          }
         }
       } catch (refreshError) {
         console.error('Error refreshing students:', refreshError);
+      }
+
+      // 如果刷新失败，至少在前端更新受影响学生的分数
+      if (!refreshSucceeded) {
+        setStudents(prevStudents =>
+          prevStudents.map(s => {
+            if (ids.includes(s.id)) {
+              return {
+                ...s,
+                points: s.points + points,
+                exp: (s.exp || 0) + (exp || 0),
+                level: exp ? calcLevelFromExp((s.exp || 0) + exp) : s.level
+              };
+            }
+            return s;
+          })
+        );
       }
     } catch (error) {
       console.error('Error updating scores:', error);
