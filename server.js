@@ -46,14 +46,14 @@ app.use('/bigscreen', express.static(path.join(__dirname, 'public/bigscreen')));
  * 访问: https://xysrxgjnpycd.sealoshzh.site/display
  */
 app.get('/display', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public/display.html'));
+  res.sendFile(path.join(__dirname, 'public/bigscreen/index.html'));
 });
 
 /**
  * 大屏端 hash 路由支持
  */
 app.get(/^\/display\//, (req, res) => {
-  res.sendFile(path.join(__dirname, 'public/display.html'));
+  res.sendFile(path.join(__dirname, 'public/bigscreen/index.html'));
 });
 
 /**
@@ -61,14 +61,14 @@ app.get(/^\/display\//, (req, res) => {
  * 访问: https://xysrxgjnpycd.sealoshzh.site/admin
  */
 app.get('/admin', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public/admin.html'));
+  res.sendFile(path.join(__dirname, 'public/index.html'));
 });
 
 /**
  * 教师端 hash 路由支持
  */
 app.get(/^\/admin\//, (req, res) => {
-  res.sendFile(path.join(__dirname, 'public/admin.html'));
+  res.sendFile(path.join(__dirname, 'public/index.html'));
 });
 
 /**
@@ -76,14 +76,14 @@ app.get(/^\/admin\//, (req, res) => {
  * 访问: https://xysrxgjnpycd.sealoshzh.site/student
  */
 app.get('/student', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public/student.html'));
+  res.sendFile(path.join(__dirname, 'public/index.html'));
 });
 
 /**
  * 学生端 hash 路由支持
  */
 app.get(/^\/student\//, (req, res) => {
-  res.sendFile(path.join(__dirname, 'public/student.html'));
+  res.sendFile(path.join(__dirname, 'public/index.html'));
 });
 
 // 根路由重定向到 admin
