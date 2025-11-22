@@ -69,9 +69,9 @@ function App() {
   const [pkMatches, setPkMatches] = useState<PKMatch[]>(MOCK_PK);
   const [badges, setBadges] = useState<Badge[]>(MOCK_BADGES);
   const [tasks, setTasks] = useState<Task[]>(MOCK_TASKS);
-  const [classes, setClasses] = useState<string[]>(['黄老师班','姜老师班','龙老师班']);
+  const [classes, setClasses] = useState<string[]>([]);
   const [identity, setIdentity] = useState<'teacher'|'principal'>('teacher');
-  const [teacherClass, setTeacherClass] = useState<string>('黄老师班');
+  const [teacherClass, setTeacherClass] = useState<string>('');
 
   // Lifted Score State for Synchronization
   const [scorePresets, setScorePresets] = useState<PointPreset[]>(INITIAL_PRESETS);
@@ -115,6 +115,13 @@ function App() {
             habitStats: Object.fromEntries(MOCK_HABITS.map(h => [h.id, 0]))
           }));
           setStudents(arr);
+
+          // 从学生数据中提取所有班级，自动设置班级列表
+          const uniqueClasses = Array.from(new Set(arr.map(s => s.className))).sort();
+          if (uniqueClasses.length > 0) {
+            setClasses(uniqueClasses);
+            setTeacherClass(uniqueClasses[0]);
+          }
         } else {
           console.error('Failed to fetch students:', data);
         }
@@ -129,11 +136,7 @@ function App() {
     setTasks([]);
   }, []);
 
-  useEffect(() => {
-    if (!teacherClass && classes.length > 0) {
-      setTeacherClass(classes[0]);
-    }
-  }, [classes]);
+  // 班级已在初始 fetchStudents 中自动设置，无需额外处理
 
   const handleUpdateScore = async (ids: string[], points: number, reason: string, exp?: number) => {
     try {
