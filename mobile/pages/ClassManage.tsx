@@ -142,6 +142,16 @@ const ClassManage: React.FC<ClassManageProps> = ({
       return out;
   };
 
+  // 同步 selectedStudent 与 students 的更新（包括 habitStats）
+  React.useEffect(() => {
+    if (selectedStudent) {
+      const updatedStudent = students.find(s => s.id === selectedStudent.id);
+      if (updatedStudent) {
+        setSelectedStudent(updatedStudent);
+      }
+    }
+  }, [students]);
+
   const toggleBulkSelectId = (id: string) => {
     setBulkSelectedIds(prev => {
       const next = new Set(prev);
