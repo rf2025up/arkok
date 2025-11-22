@@ -1,0 +1,18 @@
+# 前端应用 Docker 镜像
+FROM node:18-alpine
+
+# 设置工作目录
+WORKDIR /app
+
+# 安装 http-server 用于提供静态文件
+RUN npm install -g http-server
+
+# 复制构建的前端文件
+COPY bigscreen/dist ./bigscreen-dist
+COPY mobile/dist ./mobile-dist
+
+# 暴露端口
+EXPOSE 3001 3002
+
+# 启动脚本
+CMD ["sh", "-c", "http-server ./bigscreen-dist -p 3001 --cors & http-server ./mobile-dist -p 3002 --cors & wait"]

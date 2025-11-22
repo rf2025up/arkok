@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    container_name: growark-backend
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: ${DB_HOST:-entr-postgresql.ns-ll4yxeb3.svc}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-4z2hdw8n}
+      DB_NAME: ${DB_NAME:-postgres}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - growark-network
+    restart: always
+
+  # 可选：如果使用Sealos提供的数据库，则不需要此服务
+  # 但如果需要本地开发数据库，可以取消注释
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: growark-db
+  #   environment:
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: 4z2hdw8n
+  #     POSTGRES_DB: postgres
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   ports:
+  #     - "5432:5432"
+  #   networks:
+  #     - growark-network
+  #   restart: always
+
+networks:
+  growark-network:
+    driver: bridge
+
+# volumes:
+#   postgres_data:

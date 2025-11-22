@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API 文档</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 24px;
+            text-align: center;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .api-endpoint {
+            background: white;
+            margin: 20px 0;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .api-method {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            color: white;
+            font-weight: 600;
+            font-size: 12px;
+            margin-right: 12px;
+            margin-bottom: 12px;
+        }
+
+        .method-get {
+            background: #48bb78;
+        }
+
+        .method-post {
+            background: #4299e1;
+        }
+
+        .method-put {
+            background: #ed8936;
+        }
+
+        .method-delete {
+            background: #f56565;
+        }
+
+        .api-path {
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            background: #f7fafc;
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin: 12px 0;
+            overflow-x: auto;
+        }
+
+        .api-section {
+            margin: 16px 0;
+        }
+
+        .api-section-title {
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        code {
+            background: #f7fafc;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+
+        pre {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 12px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        .response-example {
+            margin-top: 12px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 10px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        th {
+            background: #f7fafc;
+            font-weight: 600;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            padding: 10px 20px;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            transition: background 0.3s;
+        }
+
+        .back-link:hover {
+            background: #5568d3;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📚 学生积分管理系统 API 文档</h1>
+        <p>基础 URL: http://localhost:3000/api</p>
+    </div>
+
+    <div class="container">
+        <a href="/admin" class="back-link">← 返回管理后台</a>
+
+        <!-- Get all students -->
+        <div class="api-endpoint">
+            <div>
+                <span class="api-method method-get">GET</span>
+                <span class="api-path">/students</span>
+            </div>
+            <div class="api-section">
+                <div class="api-section-title">描述</div>
+                <p>获取所有学生列表</p>
+            </div>
+            <div class="api-section">
+                <div class="api-section-title">查询参数</div>
+                <table>
+                    <tr>
+                        <th>参数名</th>
+                        <th>类型</th>
+                        <th>描述</th>
+                    </tr>
+                    <tr>
+                        <td>sort</td>
+                        <td>string</td>
+                        <td>排序字段: id, name, score (默认: id)</td>
+                    </tr>
+                    <tr>
+                        <td>order</td>
+                        <td>string</td>
+                        <td>排序顺序: ASC, DESC (默认: ASC)</td>
+                    </tr>
+                    <tr>
+                        <td>name</td>
+                        <td>string</td>
+                        <td>按名称搜索 (模糊匹配)</td>
+                    </tr>
+                </table>
+            </div>
+            <div class="api-section">
+                <div class="api-section-title">请求示例</div>
+                <p>GET /students?sort=score&order=DESC</p>
+            </div>
+            <div class="api-section response-example">
+                <div class="api-section-title">响应示例</div>
+                <pre>{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "name": "张三",
+      "score": 85,
+      "created_at": "2025-11-21T16:05:14.658Z",
+      "updated_at": "2025-11-21T16:05:14.658Z"
+    }
+  ],
+  "total": 1
+}</pre>
+            </div>
+        </div>
+
+        <!-- Get single student -->
+        <div class="api-endpoint">
+            <div>
+                <span class="api-method method-get">GET</span>
+                <span class="api-path">/students/:id</span>
+            </div>
+            <div class="api-section">
+                <div class="api-section-title">描述</div>
+                <p>获取单个学生信息</p>
+            </div>
+            <div class="api-section">
+                <div class="api-section-title">路径参数</div>
+                <table>
+                    <tr>
+                        <th>参数名</th>
+                        <th>类型</th>
+                        <th>描述</th>
+                    </tr>
+                    <tr>
+                        <td>id</td>
+                        <td>number</td>
+                        <td>学生 ID</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <!-- Create student -->
+        <div class="api-endpoint">
+            <div>
+                <span class="api-method method-post">POST</span>
+                <span class="api-path">/students</span>
+            </div>
+            <div class="api-section">
+                <div class="api-section-title">描述</div>
+                <p>创建新学生</p>
+            </div>
+            <div class="api-section">
+                <div class="api-section-title">请求体</div>
+                <pre>{
+  "name": "张三",
+  "score": 85
+}</pre>
+            </div>
+            <div class="api-section">
+                <div class="api-section-title">参数说明</div>
+                <table>
+                    <tr>
+                        <th>参数名</th>
+                        <th>类型</th>
+                        <th>必需</th>
+                        <th>描述</th>
+                    </tr>
+                    <tr>
+                        <td>name</td>
+                        <td>string</td>
+                        <td>是</td>
+                        <td>学生名称 (唯一)</td>
+                    </tr>
+                    <tr>
+                        <td>score</td>
+                        <td>number</td>
+                        <td>否</td>
+                        <td>初始积分 (默认: 0)</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <!-- Update student -->
+        <div class="api-endpoint">
+            <div>
+                <span class="api-method method-put">PUT</span>
+                <span class="api-path">/students/:id</span>
+            </div>
+            <div class="api-section">
+                <div class="api-section-title">描述</div>
+                <p>更新学生信息</p>
+            </div>
+            <div class="api-section">
+                <div class="api-section-title">请求体</div>
+                <pre>{
+  "name": "张三新",
+  "score": 90
+}</pre>
+            </div>
+            <div class="api-section">
+                <div class="api-section-title">参数说明</div>
+                <p>至少需要提供一个字段进行更新</p>
+            </div>
+        </div>
+
+        <!-- Delete student -->
+        <div class="api-endpoint">
+            <div>
+                <span class="api-method method-delete">DELETE</span>
+                <span class="api-path">/students/:id</span>
+            </div>
+            <div class="api-section">
+                <div class="api-section-title">描述</div>
+                <p>删除学生</p>
+            </div>
+        </div>
+
+        <!-- Adjust score -->
+        <div class="api-endpoint">
+            <div>
+                <span class="api-method method-post">POST</span>
+                <span class="api-path">/students/:id/adjust-score</span>
+            </div>
+            <div class="api-section">
+                <div class="api-section-title">描述</div>
+                <p>调整学生积分 (增加或减少)</p>
+            </div>
+            <div class="api-section">
+                <div class="api-section-title">请求体</div>
+                <pre>{
+  "delta": 5
+}</pre>
+            </div>
+            <div class="api-section">
+                <div class="api-section-title">参数说明</div>
+                <table>
+                    <tr>
+                        <th>参数名</th>
+                        <th>类型</th>
+                        <th>描述</th>
+                    </tr>
+                    <tr>
+                        <td>delta</td>
+                        <td>number</td>
+                        <td>积分变化值 (正数: 增加, 负数: 减少)</td>
+                    </tr>
+                </table>
+            </div>
+            <div class="api-section response-example">
+                <div class="api-section-title">响应示例</div>
+                <pre>{
+  "success": true,
+  "data": {
+    "id": 1,
+    "name": "张三",
+    "score": 90,
+    "updated_at": "2025-11-21T16:10:00.000Z"
+  }
+}</pre>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

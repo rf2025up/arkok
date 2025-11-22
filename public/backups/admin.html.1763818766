@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>学生积分管理 - 后台管理</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.5;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 16px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .container {
+            max-width: 100%;
+            padding: 0;
+        }
+
+        .section {
+            background: white;
+            margin: 8px 0;
+            border-radius: 8px;
+        }
+
+        .section-title {
+            padding: 12px 16px;
+            background: #f9f9f9;
+            font-weight: 600;
+            font-size: 14px;
+            color: #666;
+            border-bottom: 1px solid #e5e5e5;
+        }
+
+        .section-content {
+            padding: 16px;
+        }
+
+        /* Form styles */
+        .form-group {
+            margin-bottom: 12px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        /* Button styles */
+        .button-group {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            flex: 1;
+            min-width: 100px;
+            padding: 10px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: inherit;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:active {
+            background: #5568d3;
+            transform: scale(0.98);
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+            border: 1px solid #ddd;
+        }
+
+        .btn-secondary:active {
+            background: #e5e5e5;
+        }
+
+        .btn-danger {
+            background: #f56565;
+            color: white;
+        }
+
+        .btn-danger:active {
+            background: #e53e3e;
+        }
+
+        .btn-success {
+            background: #48bb78;
+            color: white;
+        }
+
+        .btn-success:active {
+            background: #38a169;
+        }
+
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 12px;
+            flex: none;
+            min-width: auto;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 0;
+            border-bottom: 1px solid #e5e5e5;
+            margin-bottom: 16px;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 12px;
+            text-align: center;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            color: #666;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Student list */
+        .student-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .student-item {
+            background: #f9f9f9;
+            border: 1px solid #e5e5e5;
+            border-radius: 6px;
+            padding: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .student-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .student-name {
+            font-weight: 600;
+            font-size: 16px;
+            margin-bottom: 4px;
+            word-break: break-word;
+        }
+
+        .student-score {
+            font-size: 14px;
+            color: #666;
+        }
+
+        .student-score .label {
+            color: #999;
+        }
+
+        .student-score .value {
+            color: #f59e0b;
+            font-weight: 600;
+        }
+
+        .student-actions {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .score-adjuster {
+            display: flex;
+            gap: 4px;
+        }
+
+        .score-adjuster button {
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            font-size: 18px;
+            line-height: 1;
+        }
+
+        .score-adjuster .score-display {
+            min-width: 50px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 600;
+            color: #f59e0b;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        /* Group styles */
+        .group-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .group-item {
+            background: #f9f9f9;
+            border: 1px solid #e5e5e5;
+            border-radius: 6px;
+            padding: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .group-info {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .group-color {
+            width: 24px;
+            height: 24px;
+            border-radius: 4px;
+            flex-shrink: 0;
+        }
+
+        .group-name {
+            font-weight: 600;
+            font-size: 16px;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            padding: 16px;
+            overflow-y: auto;
+        }
+
+        .modal.active {
+            display: flex;
+            align-items: flex-end;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 12px 12px 0 0;
+            padding: 20px;
+            width: 100%;
+            max-width: 100%;
+            animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(100%);
+            }
+            to {
+                transform: translateY(0);
+            }
+        }
+
+        .modal-header {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #666;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+        }
+
+        /* Alert and messages */
+        .alert {
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 12px;
+            font-size: 14px;
+            animation: slideDown 0.3s ease;
+        }
+
+        @keyframes slideDown {
+            from {
+                transform: translateY(-100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .alert-warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+        }
+
+        /* Stats */
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 16px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-card.alt {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .stat-label {
+            font-size: 12px;
+            opacity: 0.9;
+            margin-bottom: 6px;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 32px 16px;
+            color: #999;
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+        }
+
+        /* Responsive */
+        @media (max-width: 480px) {
+            .student-actions {
+                flex-direction: column;
+            }
+
+            .btn-small {
+                width: 100%;
+            }
+        }
+
+        /* 隐藏搜索筛选和排序功能 */
+        .section:has(.search-bar) {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📚 学生积分管理</h1>
+    </div>
+
+    <div class="container">
+        <!-- Alerts -->
+        <div id="alertContainer" style="padding: 8px 16px; padding-top: 12px;"></div>
+
+        <!-- Tabs -->
+        <div class="section">
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('students-tab')">学生列表</button>
+                <button class="tab" onclick="switchTab('groups-tab')">分组管理</button>
+            </div>
+        </div>
+
+        <!-- Stats Section -->
+        <div class="section">
+            <div class="section-content">
+                <div class="stats">
+                    <div class="stat-card">
+                        <div class="stat-label">总学生数</div>
+                        <div class="stat-value" id="totalStudents">0</div>
+                    </div>
+                    <div class="stat-card alt">
+                        <div class="stat-label">平均积分</div>
+                        <div class="stat-value" id="avgScore">0</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Students Tab -->
+        <div id="students-tab" class="tab-content active">
+            <!-- Add Student Section -->
+            <div class="section">
+                <div class="section-title">添加新学生</div>
+                <div class="section-content">
+                    <div class="form-group">
+                        <label for="studentName">学生名称</label>
+                        <input type="text" id="studentName" placeholder="输入学生名称">
+                    </div>
+                    <div class="form-group">
+                        <label for="studentScore">初始积分</label>
+                        <input type="number" id="studentScore" value="0" placeholder="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="studentGroup">分组</label>
+                        <select id="studentGroup"></select>
+                    </div>
+                    <div class="button-group">
+                        <button class="btn-primary" onclick="addStudent()">添加学生</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Search Section -->
+            <div class="section">
+                <div class="section-title">搜索和筛选</div>
+                <div class="section-content">
+                    <div class="search-bar">
+                        <input type="text" id="searchInput" placeholder="搜索学生名称...">
+                        <button class="btn-secondary" onclick="searchStudents()">搜索</button>
+                    </div>
+                    <div class="button-group">
+                        <button class="btn-secondary" onclick="sortBy('name')">按名称排序</button>
+                        <button class="btn-secondary" onclick="sortBy('score')">按积分排序</button>
+                        <button class="btn-secondary" onclick="loadStudents()">刷新列表</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Students List Section -->
+            <div class="section">
+                <div class="section-title">学生列表</div>
+                <div class="section-content">
+                    <div id="studentsList" class="student-list">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">👥</div>
+                            <div>暂无学生数据</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Groups Tab -->
+        <div id="groups-tab" class="tab-content">
+            <!-- Add Group Section -->
+            <div class="section">
+                <div class="section-title">创建新分组</div>
+                <div class="section-content">
+                    <div class="form-group">
+                        <label for="groupName">分组名称</label>
+                        <input type="text" id="groupName" placeholder="输入分组名称，如：A班">
+                    </div>
+                    <div class="form-group">
+                        <label for="groupColor">分组颜色</label>
+                        <input type="color" id="groupColor" value="#667eea">
+                    </div>
+                    <div class="button-group">
+                        <button class="btn-primary" onclick="addGroup()">创建分组</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Groups List Section -->
+            <div class="section">
+                <div class="section-title">分组列表</div>
+                <div class="section-content">
+                    <div id="groupsList" class="group-list">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📋</div>
+                            <div>暂无分组数据</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom spacer -->
+        <div style="height: 20px;"></div>
+    </div>
+
+    <!-- Edit Student Modal -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span>编辑学生信息</span>
+                <button class="modal-close" onclick="closeEditModal()">×</button>
+            </div>
+            <div class="form-group">
+                <label for="editStudentName">学生名称</label>
+                <input type="text" id="editStudentName">
+            </div>
+            <div class="form-group">
+                <label for="editStudentScore">积分</label>
+                <input type="number" id="editStudentScore">
+            </div>
+            <div class="form-group">
+                <label for="editStudentGroup">分组</label>
+                <select id="editStudentGroup"></select>
+            </div>
+            <div class="button-group">
+                <button class="btn-primary" onclick="saveEdit()">保存</button>
+                <button class="btn-secondary" onclick="closeEditModal()">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Student Modal -->
+    <div id="deleteModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span>确认删除</span>
+                <button class="modal-close" onclick="closeDeleteModal()">×</button>
+            </div>
+            <p id="deleteMessage" style="margin-bottom: 20px; font-size: 14px; color: #666;"></p>
+            <div class="button-group">
+                <button class="btn-danger" onclick="confirmDelete()">确认删除</button>
+                <button class="btn-secondary" onclick="closeDeleteModal()">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Group Modal -->
+    <div id="deleteGroupModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span>确认删除</span>
+                <button class="modal-close" onclick="closeDeleteGroupModal()">×</button>
+            </div>
+            <p id="deleteGroupMessage" style="margin-bottom: 20px; font-size: 14px; color: #666;"></p>
+            <div class="button-group">
+                <button class="btn-danger" onclick="confirmDeleteGroup()">确认删除</button>
+                <button class="btn-secondary" onclick="closeDeleteGroupModal()">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '/api';
+        let currentEditId = null;
+        let currentDeleteId = null;
+        let currentDeleteGroupId = null;
+        let allStudents = [];
+        let allGroups = [];
+        let currentSort = 'id';
+        let currentOrder = 'ASC';
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadGroups();
+            loadStudents();
+            setInterval(loadStudents, 30000);
+        });
+
+        // Switch tabs
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+            if (tabName === 'groups-tab') {
+                loadGroups();
+            } else {
+                loadStudents();
+            }
+        }
+
+        // Load groups
+        async function loadGroups() {
+            try {
+                const response = await fetch(`${API_URL}/groups`);
+                const result = await response.json();
+                if (result.success) {
+                    allGroups = result.data;
+                    updateGroupSelects();
+                    renderGroups(allGroups);
+                }
+            } catch (error) {
+                showAlert('加载分组失败: ' + error.message, 'error');
+            }
+        }
+
+        // Update group select dropdowns
+        function updateGroupSelects() {
+            const selects = document.querySelectorAll('select[id$="Group"]');
+            selects.forEach(select => {
+                const currentValue = select.value;
+                select.innerHTML = allGroups.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+                if (currentValue) select.value = currentValue;
+            });
+        }
+
+        // Render groups
+        function renderGroups(groups) {
+            const container = document.getElementById('groupsList');
+            if (groups.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📋</div>
+                        <div>暂无分组数据</div>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = groups.map(group => `
+                <div class="group-item">
+                    <div class="group-info">
+                        <div class="group-color" style="background-color: ${group.color}"></div>
+                        <div class="group-name">${escapeHtml(group.name)}</div>
+                    </div>
+                    <div class="student-actions">
+                        <button class="btn-secondary btn-small" onclick="openEditGroupModal(${group.id})">编辑</button>
+                        <button class="btn-danger btn-small" onclick="openDeleteGroupModal(${group.id})">删除</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Add group
+        async function addGroup() {
+            const name = document.getElementById('groupName').value.trim();
+            const color = document.getElementById('groupColor').value;
+
+            if (!name) {
+                showAlert('请输入分组名称', 'warning');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/groups`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, color })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showAlert('分组创建成功! 🎉', 'success');
+                    document.getElementById('groupName').value = '';
+                    document.getElementById('groupColor').value = '#667eea';
+                    loadGroups();
+                } else {
+                    showAlert('创建失败: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showAlert('网络错误: ' + error.message, 'error');
+            }
+        }
+
+        // Delete group modal
+        function openDeleteGroupModal(groupId) {
+            const group = allGroups.find(g => g.id === groupId);
+            if (!group) return;
+
+            currentDeleteGroupId = groupId;
+            document.getElementById('deleteGroupMessage').textContent = `确定要删除 "${group.name}" 吗？`;
+            document.getElementById('deleteGroupModal').classList.add('active');
+        }
+
+        function closeDeleteGroupModal() {
+            document.getElementById('deleteGroupModal').classList.remove('active');
+            currentDeleteGroupId = null;
+        }
+
+        async function confirmDeleteGroup() {
+            try {
+                const response = await fetch(`${API_URL}/groups/${currentDeleteGroupId}`, {
+                    method: 'DELETE'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showAlert('删除成功! 🗑️', 'success');
+                    closeDeleteGroupModal();
+                    loadGroups();
+                } else {
+                    showAlert('删除失败: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showAlert('网络错误: ' + error.message, 'error');
+            }
+        }
+
+        // Load all students
+        async function loadStudents() {
+            try {
+                const response = await fetch(`${API_URL}/students?sort=${currentSort}&order=${currentOrder}`);
+                const result = await response.json();
+
+                if (result.success) {
+                    allStudents = result.data;
+                    renderStudents(allStudents);
+                    updateStats();
+                } else {
+                    showAlert('加载失败: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showAlert('网络错误: ' + error.message, 'error');
+            }
+        }
+
+        // Render students list
+        function renderStudents(students) {
+            const container = document.getElementById('studentsList');
+
+            if (students.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">👥</div>
+                        <div>暂无学生数据</div>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = students.map(student => {
+                const group = allGroups.find(g => g.id === student.group_id);
+                return `
+                <div class="student-item">
+                    <div class="student-info">
+                        <div class="student-name">${escapeHtml(student.name)}</div>
+                        <div class="student-score">
+                            <span class="label">当前积分:</span>
+                            <span class="value">${student.score}</span>
+                            ${group ? `<span style="margin-left: 12px; color: #666;">${escapeHtml(group.name)}</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="student-actions">
+                        <div class="score-adjuster">
+                            <button class="btn-primary btn-small" onclick="adjustScore(${student.id}, -1)">−</button>
+                            <div class="score-display">${student.score}</div>
+                            <button class="btn-primary btn-small" onclick="adjustScore(${student.id}, 1)">+</button>
+                        </div>
+                        <button class="btn-secondary btn-small" onclick="openEditModal(${student.id})">编辑</button>
+                        <button class="btn-danger btn-small" onclick="openDeleteModal(${student.id})">删除</button>
+                    </div>
+                </div>
+            `;
+            }).join('');
+        }
+
+        // Add student
+        async function addStudent() {
+            const name = document.getElementById('studentName').value.trim();
+            const score = parseInt(document.getElementById('studentScore').value) || 0;
+            const group_id = parseInt(document.getElementById('studentGroup').value) || null;
+
+            if (!name) {
+                showAlert('请输入学生名称', 'warning');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/students`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, score, group_id })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showAlert('学生添加成功! 🎉', 'success');
+                    document.getElementById('studentName').value = '';
+                    document.getElementById('studentScore').value = '0';
+                    loadStudents();
+                } else {
+                    showAlert('添加失败: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showAlert('网络错误: ' + error.message, 'error');
+            }
+        }
+
+        // Adjust score
+        async function adjustScore(studentId, delta) {
+            try {
+                const response = await fetch(`${API_URL}/students/${studentId}/adjust-score`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ delta })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    loadStudents();
+                } else {
+                    showAlert('调整失败: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showAlert('网络错误: ' + error.message, 'error');
+            }
+        }
+
+        // Open edit modal
+        function openEditModal(studentId) {
+            const student = allStudents.find(s => s.id === studentId);
+            if (!student) return;
+
+            currentEditId = studentId;
+            document.getElementById('editStudentName').value = student.name;
+            document.getElementById('editStudentScore').value = student.score;
+            document.getElementById('editStudentGroup').value = student.group_id || '';
+            document.getElementById('editModal').classList.add('active');
+        }
+
+        // Close edit modal
+        function closeEditModal() {
+            document.getElementById('editModal').classList.remove('active');
+            currentEditId = null;
+        }
+
+        // Save edit
+        async function saveEdit() {
+            const name = document.getElementById('editStudentName').value.trim();
+            const score = parseInt(document.getElementById('editStudentScore').value) || 0;
+            const group_id = parseInt(document.getElementById('editStudentGroup').value) || null;
+
+            if (!name) {
+                showAlert('请输入学生名称', 'warning');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/students/${currentEditId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, score, group_id })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showAlert('更新成功! ✓', 'success');
+                    closeEditModal();
+                    loadStudents();
+                } else {
+                    showAlert('更新失败: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showAlert('网络错误: ' + error.message, 'error');
+            }
+        }
+
+        // Open delete modal
+        function openDeleteModal(studentId) {
+            const student = allStudents.find(s => s.id === studentId);
+            if (!student) return;
+
+            currentDeleteId = studentId;
+            document.getElementById('deleteMessage').textContent = `确定要删除 "${student.name}" 吗？此操作不可撤销。`;
+            document.getElementById('deleteModal').classList.add('active');
+        }
+
+        // Close delete modal
+        function closeDeleteModal() {
+            document.getElementById('deleteModal').classList.remove('active');
+            currentDeleteId = null;
+        }
+
+        // Confirm delete
+        async function confirmDelete() {
+            try {
+                const response = await fetch(`${API_URL}/students/${currentDeleteId}`, {
+                    method: 'DELETE'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showAlert('删除成功! 🗑️', 'success');
+                    closeDeleteModal();
+                    loadStudents();
+                } else {
+                    showAlert('删除失败: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showAlert('网络错误: ' + error.message, 'error');
+            }
+        }
+
+        // Search students
+        function searchStudents() {
+            const searchTerm = document.getElementById('searchInput').value.trim();
+            if (!searchTerm) {
+                renderStudents(allStudents);
+                return;
+            }
+
+            const filtered = allStudents.filter(s =>
+                s.name.toLowerCase().includes(searchTerm.toLowerCase())
+            );
+            renderStudents(filtered);
+        }
+
+        // Sort by field
+        function sortBy(field) {
+            if (currentSort === field) {
+                currentOrder = currentOrder === 'ASC' ? 'DESC' : 'ASC';
+            } else {
+                currentSort = field;
+                currentOrder = 'ASC';
+            }
+            loadStudents();
+        }
+
+        // Update stats
+        function updateStats() {
+            document.getElementById('totalStudents').textContent = allStudents.length;
+            const avgScore = allStudents.length > 0
+                ? Math.round(allStudents.reduce((sum, s) => sum + s.score, 0) / allStudents.length)
+                : 0;
+            document.getElementById('avgScore').textContent = avgScore;
+        }
+
+        // Show alert
+        function showAlert(message, type = 'success') {
+            const container = document.getElementById('alertContainer');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.textContent = message;
+            container.appendChild(alert);
+
+            setTimeout(() => {
+                alert.remove();
+            }, 3000);
+        }
+
+        // Escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Listen for enter key in search
+        document.addEventListener('DOMContentLoaded', () => {
+            const searchInput = document.getElementById('searchInput');
+            if (searchInput) {
+                searchInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        searchStudents();
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>

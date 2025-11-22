@@ -1,0 +1,200 @@
+apiVersion: apps.sealos.io/v1
+kind: Application
+metadata:
+  name: growark-bigscreen
+  namespace: default
+spec:
+  displayName: "Growark BigScreen"
+  description: "星途成长方舟 - 大屏实时显示系统"
+  icon: "https://via.placeholder.com/48"
+
+  template:
+    metadata:
+      labels:
+        app: growark-bigscreen
+    spec:
+      containers:
+      - name: bigscreen
+        image: node:18-alpine
+        workingDir: /app
+        command:
+          - /bin/sh
+          - -c
+          - |
+            # 使用 http-server 提供静态文件
+            npm install -g http-server && \
+            http-server /app/dist -p 3001 --cors
+
+        # 端口配置
+        ports:
+        - containerPort: 3001
+          name: http
+          protocol: TCP
+
+        # 环境变量
+        env:
+        - name: NODE_ENV
+          value: "production"
+
+        # 资源限制
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+
+        # 健康检查
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3001
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3001
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 2
+
+  # 网络配置
+  networking:
+    - port: 3001
+      name: http
+      protocol: TCP
+
+  # 副本数
+  replicas: 2
+
+  # 自动扩缩容
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: growark-bigscreen-svc
+  namespace: default
+  labels:
+    app: growark-bigscreen
+spec:
+  type: LoadBalancer
+  selector:
+    app: growark-bigscreen
+  ports:
+  - port: 80
+    targetPort: 3001
+    protocol: TCP
+    name: http
+  sessionAffinity: ClientIP
+
+---
+apiVersion: apps.sealos.io/v1
+kind: Application
+metadata:
+  name: growark-mobile
+  namespace: default
+spec:
+  displayName: "Growark Mobile"
+  description: "星途成长方舟 - 学生管理系统"
+  icon: "https://via.placeholder.com/48"
+
+  template:
+    metadata:
+      labels:
+        app: growark-mobile
+    spec:
+      containers:
+      - name: mobile
+        image: node:18-alpine
+        workingDir: /app
+        command:
+          - /bin/sh
+          - -c
+          - |
+            # 使用 http-server 提供静态文件
+            npm install -g http-server && \
+            http-server /app/dist -p 3002 --cors
+
+        # 端口配置
+        ports:
+        - containerPort: 3002
+          name: http
+          protocol: TCP
+
+        # 环境变量
+        env:
+        - name: NODE_ENV
+          value: "production"
+
+        # 资源限制
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+
+        # 健康检查
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3002
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3002
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 2
+
+  # 网络配置
+  networking:
+    - port: 3002
+      name: http
+      protocol: TCP
+
+  # 副本数
+  replicas: 2
+
+  # 自动扩缩容
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: growark-mobile-svc
+  namespace: default
+  labels:
+    app: growark-mobile
+spec:
+  type: LoadBalancer
+  selector:
+    app: growark-mobile
+  ports:
+  - port: 80
+    targetPort: 3002
+    protocol: TCP
+    name: http
+  sessionAffinity: ClientIP
