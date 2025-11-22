@@ -5,7 +5,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    strictPort: false
+    strictPort: false,
+    allowedHosts: ['xysrxgjnpycd.sealoshzh.site', 'localhost', '127.0.0.1'],
   },
   build: {
     outDir: 'dist',
