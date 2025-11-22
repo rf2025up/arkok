@@ -251,21 +251,43 @@ function App() {
           }
         }
 
-        // 更新打卡数据到前端状态
-        setStudents(prevStudents =>
-          prevStudents.map(s => {
-            if (studentIds.includes(s.id)) {
-              return {
-                ...s,
-                habitStats: {
-                  ...s.habitStats,
-                  [habitId]: (s.habitStats?.[habitId] || 0) + 1
-                }
-              };
+        // 打卡完成后，从 API 重新获取学生数据以获得最新的 habitStats
+        try {
+          const refreshResponse = await fetch(`${apiUrl}/students`);
+          if (refreshResponse.ok) {
+            const refreshData = await refreshResponse.json();
+            if (refreshData.success && Array.isArray(refreshData.data)) {
+              const arr = refreshData.data.map((apiStudent: any) => ({
+                id: String(apiStudent.id),
+                name: apiStudent.name,
+                avatar: apiStudent.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(apiStudent.name)}`,
+                points: apiStudent.score || 0,
+                exp: apiStudent.total_exp || 0,
+                level: apiStudent.level || 1,
+                className: apiStudent.class_name || '未分配',
+                habitStats: apiStudent.habit_stats || {}
+              }));
+              setStudents(arr);
             }
-            return s;
-          })
-        );
+          }
+        } catch (refreshError) {
+          console.error('Error refreshing students after checkin:', refreshError);
+          // 如果刷新失败，至少在前端更新受影响学生的 habitStats
+          setStudents(prevStudents =>
+            prevStudents.map(s => {
+              if (studentIds.includes(s.id)) {
+                return {
+                  ...s,
+                  habitStats: {
+                    ...s.habitStats,
+                    [habitId]: (s.habitStats?.[habitId] || 0) + 1
+                  }
+                };
+              }
+              return s;
+            })
+          );
+        }
 
         // 同时更新积分
         handleUpdateScore(studentIds, 5, '习惯打卡');
