@@ -1368,47 +1368,64 @@ const ClassManage: React.FC<ClassManageProps> = ({
             <div className="bg-white rounded-3xl p-4 shadow-sm">
               <div className="mb-3"><span className="inline-block px-3 py-1 rounded-full bg-primary text-white text-xs font-bold">发布新任务</span></div>
               <div className="grid grid-cols-2 gap-2">
-                <input value={newTaskForm.title} onChange={e=>setNewTaskForm({...newTaskForm, title: e.target.value})} placeholder="任务名称" className="col-span-2 p-2 rounded-xl bg-gray-50 text-sm outline-none" />
-                <input value={newTaskForm.desc} onChange={e=>setNewTaskForm({...newTaskForm, desc: e.target.value})} placeholder="任务说明..." className="col-span-2 p-2 rounded-xl bg-gray-50 text-sm outline-none" />
+                <input value={newTaskForm.title} onChange={e=>setNewTaskForm({...newTaskForm, title: e.target.value})} placeholder="任务名称" className="col-span-2 p-2 rounded-xl bg-gray-50 text-sm outline-none border border-gray-200" />
+                <input value={newTaskForm.desc} onChange={e=>setNewTaskForm({...newTaskForm, desc: e.target.value})} placeholder="任务说明..." className="col-span-2 p-2 rounded-xl bg-gray-50 text-sm outline-none border border-gray-200" />
                 <div className="col-span-2 flex items-center gap-2">
-                  <select value={taskAssigneeSelectId} onChange={e=>setTaskAssigneeSelectId(e.target.value)} className="flex-1 p-2 rounded-xl bg-gray-50 text-sm outline-none">
-                    <option value="">选择学生</option>
+                  <select value={taskAssigneeSelectId} onChange={e=>setTaskAssigneeSelectId(e.target.value)} className="flex-1 p-2 rounded-xl bg-gray-50 text-sm outline-none border border-gray-200">
+                    <option value="">选择学生执行人</option>
                     {visibleStudents.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
                   </select>
-                  <button onClick={handleAddTaskAssignee} className="px-3 py-2 rounded-xl bg-primary text-white text-[10px]">添加</button>
+                  <button onClick={handleAddTaskAssignee} className="px-3 py-2 rounded-xl bg-primary text-white text-[10px] font-bold">添加</button>
                 </div>
-                <div className="col-span-2 flex flex-wrap gap-2">
-                  {newTaskForm.assignees.map(id => (
-                    <button key={id} onClick={()=>handleRemoveTaskAssignee(id)} className="px-2 py-1 rounded-full bg-primary/10 text-primary text-[10px]">
-                      {students.find(s=>s.id===id)?.name || id} ×
-                    </button>
-                  ))}
-                </div>
-                <input value={newTaskForm.expValue} onChange={e=>setNewTaskForm({...newTaskForm, expValue: e.target.value})} placeholder="经验奖励" className="p-2 rounded-xl bg-gray-50 text-sm outline-none" />
-                <button onClick={handlePublishTask} className="p-2 rounded-xl bg-primary text-white text-sm font-bold">发布任务</button>
+                {newTaskForm.assignees.length > 0 && (
+                  <div className="col-span-2 flex flex-wrap gap-2">
+                    <span className="text-xs font-bold text-gray-600 w-full">执行人:</span>
+                    {newTaskForm.assignees.map(id => (
+                      <button key={id} onClick={()=>handleRemoveTaskAssignee(id)} className="px-2 py-1 rounded-full bg-primary/10 text-primary text-[10px] font-bold">
+                        {students.find(s=>s.id===id)?.name || id} ×
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <input value={newTaskForm.expValue} onChange={e=>setNewTaskForm({...newTaskForm, expValue: e.target.value})} placeholder="经验奖励（必填）" type="number" className="p-2 rounded-xl bg-gray-50 text-sm outline-none border border-gray-200" />
+                <button
+                  onClick={handlePublishTask}
+                  disabled={!newTaskForm.title || !newTaskForm.expValue}
+                  className={`p-2 rounded-xl text-white text-sm font-bold ${!newTaskForm.title || !newTaskForm.expValue ? 'bg-gray-300 cursor-not-allowed' : 'bg-primary hover:brightness-105'}`}
+                >
+                  发布任务
+                </button>
               </div>
             </div>
 
-            <div className="bg-white rounded-3xl p-4 shadow-sm">
-              <h3 className="text-sm font-bold text-gray-800 mb-3">进行中的任务</h3>
-              <div className="space-y-2">
-                {tasks.map(t => (
-                  <div key={t.id} className="flex items-center justify-between bg-gray-50 p-3 rounded-xl">
-                    <div className="flex-1">
-                      <div className="text-sm font-bold text-gray-800">{t.title}</div>
-                      <div className="text-[10px] text-gray-500">{t.desc}</div>
-                      {t.assignedTo && t.assignedTo.length>0 && (
-                        <div className="mt-1 text-[10px] text-gray-600">{t.assignedTo.map(id=>students.find(s=>s.id===id)?.name || id).join('、')}</div>
-                      )}
+            {tasks.length > 0 && (
+              <div className="bg-white rounded-3xl p-4 shadow-sm">
+                <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center">
+                  <span className="inline-block w-1 h-4 bg-primary rounded-full mr-2"></span>
+                  进行中的任务（{tasks.length}个）
+                </h3>
+                <div className="space-y-2">
+                  {tasks.map(t => (
+                    <div key={t.id} className="flex items-center justify-between bg-gradient-to-r from-blue-50 to-white p-3 rounded-xl border border-blue-100">
+                      <div className="flex-1">
+                        <div className="text-sm font-bold text-gray-800">{t.title}</div>
+                        {t.desc && <div className="text-[10px] text-gray-500 mt-0.5">{t.desc}</div>}
+                        {t.assignedTo && t.assignedTo.length>0 && (
+                          <div className="mt-1 flex items-center gap-1">
+                            <span className="text-[10px] text-gray-400">执行人:</span>
+                            <span className="text-[10px] font-bold text-primary">{t.assignedTo.map(id=>students.find(s=>s.id===id)?.name || id).join('、')}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">经验+{t.expValue}</span>
+                        <button onClick={()=>onCompleteTask(t.id)} className="px-2 py-1 rounded-lg bg-primary text-white text-[10px] font-bold hover:brightness-105">完成</button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">经验 + {t.expValue}</span>
-                      <button onClick={()=>onCompleteTask(t.id)} className="px-2 py-1 rounded-lg bg-primary text-white text-[10px]">完成</button>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
 
