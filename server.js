@@ -216,14 +216,14 @@ app.get('/api/students/:id', async (req, res) => {
 });
 
 /**
- * 调整学生分数
+ * 调整学生分数和经验值
  */
 app.post('/api/students/:id/adjust-score', async (req, res) => {
   try {
-    const { delta } = req.body;
+    const { delta, exp_delta } = req.body;
     const studentId = parseInt(req.params.id);
 
-    // 获取当前分数
+    // 获取当前分数和经验值
     const currentResult = await pool.query(
       `SELECT id, name, score, total_exp, level, class_name, avatar_url FROM students WHERE id = $1`,
       [studentId]
@@ -238,18 +238,19 @@ app.post('/api/students/:id/adjust-score', async (req, res) => {
     }
 
     const student = currentResult.rows[0];
-    const newScore = (student.score || 0) + delta;
+    const newScore = (student.score || 0) + (delta || 0);
+    const newExp = (student.total_exp || 0) + (exp_delta || 0);
 
-    // 更新分数
+    // 更新分数和经验值
     const updateResult = await pool.query(
-      `UPDATE students SET score = $1 WHERE id = $2 RETURNING id, name, score, total_exp, level, class_name, avatar_url`,
-      [newScore, studentId]
+      `UPDATE students SET score = $1, total_exp = $2 WHERE id = $3 RETURNING id, name, score, total_exp, level, class_name, avatar_url`,
+      [newScore, newExp, studentId]
     );
 
     res.json({
       success: true,
       data: updateResult.rows[0],
-      message: `Score adjusted by ${delta}`,
+      message: `Score adjusted by ${delta || 0}, Experience adjusted by ${exp_delta || 0}`,
       timestamp: new Date().toISOString()
     });
   } catch (error) {

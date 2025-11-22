@@ -152,7 +152,7 @@ function App() {
         const response = await fetch(`${apiUrl}/students/${id}/adjust-score`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ delta: points })
+          body: JSON.stringify({ delta: points, exp_delta: exp || 0 })
         });
 
         if (!response.ok) {
