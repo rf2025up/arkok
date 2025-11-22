@@ -868,7 +868,15 @@ const ClassManage: React.FC<ClassManageProps> = ({
                             <div className="absolute bottom-0 right-0 bg-yellow-400 text-yellow-900 text-[10px] font-black px-2 py-0.5 rounded-full border-2 border-white shadow-sm">Lv.{selectedStudent.level}</div>
                             
                         </div>
-                        <h2 className="mt-3 text-2xl font-bold text-gray-900">{selectedStudent.name}</h2>
+                        <div className="mt-3 flex items-center gap-2 group">
+                            <h2 className="text-2xl font-bold text-gray-900">{selectedStudent.name}</h2>
+                            <button
+                                onClick={() => setEditingStudent(selectedStudent)}
+                                className="p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-100 rounded-lg"
+                            >
+                                <Edit2 size={18} className="text-primary" />
+                            </button>
+                        </div>
                         <div className="flex items-stretch gap-3 mt-2">
                             <div className="flex items-center gap-3">
                                 <div className="flex flex-col items-center justify-center bg-orange-50 px-4 py-1 rounded-xl border border-orange-100 h-[56px]">
@@ -1184,8 +1192,14 @@ const ClassManage: React.FC<ClassManageProps> = ({
                 const selected = bulkSelectedIds.has(s.id);
                 return (
                   <div key={s.id} className={`flex flex-col items-center p-2 rounded-xl ${selected?'bg-orange-50 ring-2 ring-primary':''} hover:bg-gray-50`}>
-                    <button onClick={() => { if (isBulkSelect) toggleBulkSelectId(s.id); else setSelectedStudent(s); }} onDoubleClick={() => setEditingStudent(s)} className="flex flex-col items-center">
-                      <img src={s.avatar} onError={(e)=>{ e.currentTarget.src = 'data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 fill=%22%23e5e7eb%22/><circle cx=%2232%22 cy=%2224%22 r=%2212%22 fill=%22%23cbd5e1%22/><rect x=%2216%22 y=%2240%22 width=%2232%22 height=%2216%22 rx=%228%22 fill=%22%23cbd5e1%22/></svg>'; }} alt={s.name} className={`w-14 h-14 rounded-full object-cover border-2 ${selected?'border-primary':'border-gray-100'} cursor-pointer`} title="双击编辑姓名" />
+                    <button onClick={() => {
+                      if (isBulkSelect) {
+                        toggleBulkSelectId(s.id);
+                      } else {
+                        setSelectedStudent(s);
+                      }
+                    }} className="flex flex-col items-center w-full">
+                      <img src={s.avatar} onError={(e)=>{ e.currentTarget.src = 'data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 fill=%22%23e5e7eb%22/><circle cx=%2232%22 cy=%2224%22 r=%2212%22 fill=%22%23cbd5e1%22/><rect x=%2216%22 y=%2240%22 width=%2232%22 height=%2216%22 rx=%228%22 fill=%22%23cbd5e1%22/></svg>'; }} alt={s.name} className={`w-14 h-14 rounded-full object-cover border-2 ${selected?'border-primary':'border-gray-100'} cursor-pointer hover:opacity-80 transition-opacity`} title="点击查看学生信息" />
                       <span className={`mt-2 text-xs font-bold ${selected?'text-primary':'text-gray-700'}`}>{s.name}</span>
                       <span className="text-[10px] text-gray-400 font-medium">{s.points} 积分</span>
                     </button>
