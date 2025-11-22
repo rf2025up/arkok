@@ -215,6 +215,23 @@ function App() {
   };
 
   const handleHabitCheckIn = (studentIds: string[], habitId: string) => {
+      // 更新打卡数据到前端状态
+      setStudents(prevStudents =>
+        prevStudents.map(s => {
+          if (studentIds.includes(s.id)) {
+            return {
+              ...s,
+              habitStats: {
+                ...s.habitStats,
+                [habitId]: (s.habitStats?.[habitId] || 0) + 1
+              }
+            };
+          }
+          return s;
+        })
+      );
+
+      // 同时更新积分
       handleUpdateScore(studentIds, 5, '习惯打卡');
   };
   
