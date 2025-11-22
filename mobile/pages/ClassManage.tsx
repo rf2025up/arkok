@@ -106,6 +106,7 @@ const ClassManage: React.FC<ClassManageProps> = ({
   const [pkRewardForm, setPkRewardForm] = useState<Record<string, { points: string; exp: string }>>({});
   const [challengeHistoryTab, setChallengeHistoryTab] = useState<'current' | 'past'>('current');
   const teamPressTimerRef = React.useRef<number | null>(null);
+  const [showPresetDropdown, setShowPresetDropdown] = useState(false);
 
   // -- Logic for Detail Modal --
   const getStudentChallenges = (studentId: string) => {
@@ -268,6 +269,12 @@ const ClassManage: React.FC<ClassManageProps> = ({
       const next = [...scorePresets];
       next[globalIndex] = { ...next[globalIndex], label: presetEditLabel, value: val };
       onUpdateScorePresets(next);
+  };
+
+  const handleDeletePreset = (presetLabel: string) => {
+      const filtered = scorePresets.filter(p => p.label !== presetLabel);
+      onUpdateScorePresets(filtered);
+      setSelectedPresetIndex(-1);
   };
 
   const handlePublishChallenge = async () => {
@@ -773,7 +780,7 @@ const ClassManage: React.FC<ClassManageProps> = ({
   }
 
   const handleSaveStudentName = async (newName: string) => {
-    if (!editingStudent) return;
+    if (!editingStudent) throw new Error('No student selected');
     try {
       // Get API URL
       const protocol = window.location.protocol;
@@ -788,8 +795,7 @@ const ClassManage: React.FC<ClassManageProps> = ({
       });
 
       if (!response.ok) {
-        console.error('Failed to update student name:', response.statusText);
-        return;
+        throw new Error(`Failed to update student name: ${response.statusText}`);
       }
 
       const data = await response.json();
@@ -804,12 +810,13 @@ const ClassManage: React.FC<ClassManageProps> = ({
         setSelectedStudent(prev =>
           prev && prev.id === editingStudent.id ? { ...prev, name: data.data.name } : prev
         );
+        setEditingStudent(null);
       } else {
-        console.error('Invalid response from server:', data);
+        throw new Error('Invalid response from server');
       }
-      setEditingStudent(null);
     } catch (error) {
       console.error('保存失败：', error);
+      throw error;
     }
   }
 
@@ -1263,15 +1270,33 @@ const ClassManage: React.FC<ClassManageProps> = ({
               </div>
               <div className="mt-6">
                 <div className="mb-3"><span className="inline-block px-3 py-1 rounded-full bg-primary text-white text-xs font-bold">积分预设</span></div>
-                <div className="space-y-3">
-                  {scorePresets.filter(p=>p.category===selectedScoreCategory).map((p, idx) => (
-                    <div key={idx} className="p-3 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100 transition-colors" onClick={() => setSelectedPresetIndex(idx)}>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-semibold text-gray-700">{p.label}</span>
-                        <span className="text-lg font-black text-red-600">{p.value}</span>
-                      </div>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowPresetDropdown(!showPresetDropdown)}
+                    className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 text-left hover:bg-gray-100 transition-colors flex items-center justify-between"
+                  >
+                    <span className="text-sm text-gray-600">
+                      {scorePresets.filter(p=>p.category===selectedScoreCategory).length > 0 ? '选择积分预设' : '暂无预设'}
+                    </span>
+                    <span className={`text-xs transition-transform ${showPresetDropdown ? 'rotate-180' : ''}`}>▼</span>
+                  </button>
+                  {showPresetDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-lg border border-gray-200 z-10 max-h-48 overflow-y-auto">
+                      {scorePresets.filter(p=>p.category===selectedScoreCategory).map((p, idx) => (
+                        <div
+                          key={idx}
+                          className="p-3 border-b border-gray-100 hover:bg-gray-50 cursor-pointer flex items-center justify-between"
+                          onClick={() => {
+                            setSelectedPresetIndex(idx);
+                            setShowPresetDropdown(false);
+                          }}
+                        >
+                          <span className="text-sm text-gray-700 font-medium">{p.label}</span>
+                          <span className="text-lg font-black text-red-600">{p.value}</span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
                 {selectedPresetIndex>=0 && (
                   <div className="mt-4 p-4 bg-blue-50 rounded-xl border-2 border-primary/20">
@@ -1289,7 +1314,10 @@ const ClassManage: React.FC<ClassManageProps> = ({
                         <input placeholder="经验值" type="number" className="w-full p-2 rounded-lg bg-white text-sm outline-none border border-gray-200" />
                       </div>
                     </div>
-                    <button onClick={handleSavePresetEdit} className="w-full p-2 rounded-lg bg-primary text-white text-sm font-bold hover:brightness-105 transition-all">保存修改</button>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button onClick={handleSavePresetEdit} className="col-span-2 p-2 rounded-lg bg-primary text-white text-sm font-bold hover:brightness-105 transition-all">保存修改</button>
+                      <button onClick={() => handleDeletePreset(presetEditLabel)} className="p-2 rounded-lg bg-red-500 text-white text-sm font-bold hover:brightness-105 transition-all">删除</button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1309,14 +1337,27 @@ const ClassManage: React.FC<ClassManageProps> = ({
             )}
 
             <div className="fixed bottom-24 left-0 right-0 px-4 z-30">
-              <div className="bg-white rounded-2xl shadow-lg p-3 border border-gray-100">
-                <div className="grid grid-cols-4 gap-2">
-                  <input value={newPresetCategory} onChange={e=>setNewPresetCategory(e.target.value)} placeholder="大类名称（可选）" className="p-2 rounded-xl bg-gray-50 text-sm outline-none" />
-                  <input value={newScoreForm.label} onChange={e=>setNewScoreForm({...newScoreForm, label: e.target.value})} placeholder="新增项目名称" className="p-2 rounded-xl bg-gray-50 text-sm outline-none" />
-                  <input value={newScoreForm.value} onChange={e=>setNewScoreForm({...newScoreForm, value: e.target.value})} placeholder="分值" className="p-2 rounded-xl bg-gray-50 text-sm outline-none" />
-                  <button onClick={handleAddInlineScoreItem} className="p-2 rounded-xl bg-primary text-white text-sm font-bold">新增预设</button>
+              <div className="bg-white rounded-2xl shadow-lg p-4 border border-gray-100">
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1">积分大类名称（可选）</label>
+                    <input value={newPresetCategory} onChange={e=>setNewPresetCategory(e.target.value)} placeholder="如：表现优异、积极参与..." className="w-full p-2 rounded-xl bg-gray-50 text-sm outline-none border border-gray-200" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1">项目名称</label>
+                      <input value={newScoreForm.label} onChange={e=>setNewScoreForm({...newScoreForm, label: e.target.value})} placeholder="如：主动发言" className="w-full p-2 rounded-xl bg-gray-50 text-sm outline-none border border-gray-200" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1">分值</label>
+                      <input value={newScoreForm.value} onChange={e=>setNewScoreForm({...newScoreForm, value: e.target.value})} placeholder="分值" type="number" className="w-full p-2 rounded-xl bg-gray-50 text-sm outline-none border border-gray-200" />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={handleAddInlineScoreItem} className="flex-1 p-2 rounded-xl bg-primary text-white text-sm font-bold hover:brightness-105">新增预设</button>
+                  </div>
+                  <div className="text-[10px] text-gray-500 bg-gray-50 p-2 rounded-lg">新增到：<span className="font-bold text-primary">{newPresetCategory.trim() || categoryNames[selectedScoreCategory] || selectedScoreCategory}</span></div>
                 </div>
-                <div className="text-[10px] text-gray-400 mt-1">新增到：{newPresetCategory.trim() || categoryNames[selectedScoreCategory] || selectedScoreCategory}</div>
               </div>
             </div>
           </div>
