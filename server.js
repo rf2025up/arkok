@@ -537,9 +537,9 @@ app.post('/api/pk-matches', async (req, res) => {
     const { student_a, student_b, topic, status = 'pending' } = req.body;
 
     const result = await pool.query(
-      `INSERT INTO pk_matches (student_a, student_b, topic, status)
+      `INSERT INTO pk_matches (student_a_id, student_b_id, topic, status)
        VALUES ($1, $2, $3, $4)
-       RETURNING id, student_a, student_b, topic, status`,
+       RETURNING id, student_a_id as student_a, student_b_id as student_b, topic, status`,
       [student_a, student_b, topic || '', status]
     );
 
@@ -563,7 +563,7 @@ app.post('/api/pk-matches', async (req, res) => {
  */
 app.get('/api/pk-matches', async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, student_a, student_b, topic, status, winner_id FROM pk_matches');
+    const result = await pool.query('SELECT id, student_a_id as student_a, student_b_id as student_b, topic, status, winner_id FROM pk_matches');
     res.json({
       success: true,
       data: result.rows,
@@ -588,7 +588,7 @@ app.put('/api/pk-matches/:id', async (req, res) => {
     const { status, winner_id } = req.body;
 
     const updateResult = await pool.query(
-      'UPDATE pk_matches SET status = $1, winner_id = $2 WHERE id = $3 RETURNING id, student_a, student_b, topic, status, winner_id',
+      'UPDATE pk_matches SET status = $1, winner_id = $2 WHERE id = $3 RETURNING id, student_a_id as student_a, student_b_id as student_b, topic, status, winner_id',
       [status || 'finished', winner_id || null, pkId]
     );
 
