@@ -306,8 +306,8 @@ const ClassManage: React.FC<ClassManageProps> = ({
 
               const data = await response.json();
               if (data.success && data.data) {
-                  // Add to frontend state using API response
-                  setChallenges(prev => [...prev, {
+                  // 将新挑战添加到数组头部（显示在第一行）
+                  setChallenges(prev => [{
                       id: String(data.data.id),
                       title: data.data.title,
                       desc: data.data.description,
@@ -316,7 +316,7 @@ const ClassManage: React.FC<ClassManageProps> = ({
                       rewardPoints: data.data.reward_points,
                       rewardExp: data.data.reward_exp,
                       date: new Date().toISOString()
-                  }]);
+                  }, ...prev]);
               }
           } catch (error) {
               console.error('Error publishing challenge:', error);
@@ -424,13 +424,14 @@ const ClassManage: React.FC<ClassManageProps> = ({
 
               const data = await response.json();
               if (data.success && data.data) {
-                  setPkMatches(prev => [...prev, {
+                  // 将新 PK 添加到数组头部（显示在第一行）
+                  setPkMatches(prev => [{
                       id: String(data.data.id),
                       studentA: data.data.student_a,
                       studentB: data.data.student_b,
                       topic: data.data.topic,
                       status: data.data.status
-                  }]);
+                  }, ...prev]);
               }
           } catch (error) {
               console.error('Error creating PK match:', error);

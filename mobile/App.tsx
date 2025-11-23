@@ -149,12 +149,76 @@ function App() {
     };
 
     fetchData();
-    setPkMatches([]);
-    setChallenges([]);
-    setTasks([]);
   }, []);
 
-  // 班级已在初始 fetchStudents 中自动设置，无需额外处理
+  // 初始化加载挑战、PK、勋章数据
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      try {
+        const apiUrl = process.env.REACT_APP_API_URL || (() => {
+          const protocol = window.location.protocol;
+          const host = window.location.host;
+          return `${protocol}//${host}/api`;
+        })();
+
+        // 并行加载所有数据
+        const [challengesRes, pksRes, badgesRes] = await Promise.all([
+          fetch(`${apiUrl}/challenges`),
+          fetch(`${apiUrl}/pk-matches`),
+          fetch(`${apiUrl}/badges`)
+        ]);
+
+        // 处理挑战数据
+        if (challengesRes.ok) {
+          const challengesData = await challengesRes.json();
+          if (challengesData.success && Array.isArray(challengesData.data)) {
+            setChallenges(challengesData.data.map((c: any) => ({
+              id: String(c.id),
+              title: c.title,
+              desc: c.description,
+              status: c.status,
+              participants: [],
+              rewardPoints: c.reward_points || 0,
+              rewardExp: c.reward_exp || 0,
+              date: new Date().toISOString()
+            })));
+          }
+        }
+
+        // 处理 PK 数据
+        if (pksRes.ok) {
+          const pksData = await pksRes.json();
+          if (pksData.success && Array.isArray(pksData.data)) {
+            setPkMatches(pksData.data.map((pk: any) => ({
+              id: String(pk.id),
+              studentA: String(pk.student_a),
+              studentB: String(pk.student_b),
+              topic: pk.topic,
+              status: pk.status,
+              winnerId: pk.winner_id ? String(pk.winner_id) : undefined
+            })));
+          }
+        }
+
+        // 处理勋章数据
+        if (badgesRes.ok) {
+          const badgesData = await badgesRes.json();
+          if (badgesData.success && Array.isArray(badgesData.data)) {
+            setBadges(badgesData.data.map((b: any) => ({
+              id: String(b.id),
+              name: b.name,
+              description: b.description,
+              icon: b.icon || '⭐'
+            })));
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching initial data:', error);
+      }
+    };
+
+    fetchInitialData();
+  }, []);
 
   const handleUpdateScore = async (ids: string[], points: number, reason: string, exp?: number) => {
     try {

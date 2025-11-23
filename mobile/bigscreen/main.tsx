@@ -24,6 +24,9 @@ const App: React.FC = () => {
   const [students, setStudents] = useState<Student[]>([])
   const [teams, setTeams] = useState<Team[]>([])
   const [wsConnected, setWsConnected] = useState(false)
+  const [realPks, setRealPks] = useState<any[]>([])
+  const [realChallenges, setRealChallenges] = useState<any[]>([])
+  const [realBadges, setRealBadges] = useState<any[]>([])
 
   // 初始加载队伍数据
   useEffect(() => {
@@ -36,6 +39,57 @@ const App: React.FC = () => {
       }
     }
     loadTeams()
+  }, [])
+
+  // 加载真实 PK 数据
+  useEffect(() => {
+    const loadPks = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/pk-matches`)
+        const data = await res.json()
+        if (data.success && Array.isArray(data.data)) {
+          setRealPks(data.data.map((pk: any) => ({
+            id: String(pk.id),
+            student_a: String(pk.student_a),
+            student_b: String(pk.student_b),
+            topic: pk.topic,
+            status: pk.status,
+            winner_id: pk.winner_id ? String(pk.winner_id) : undefined,
+            updated_at: new Date().toISOString()
+          })))
+        }
+      } catch (error) {
+        console.error('Failed to load PK data:', error)
+      }
+    }
+    loadPks()
+    const interval = setInterval(loadPks, 5000) // 每5秒刷新一次
+    return () => clearInterval(interval)
+  }, [])
+
+  // 加载真实挑战数据
+  useEffect(() => {
+    const loadChallenges = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/challenges`)
+        const data = await res.json()
+        if (data.success && Array.isArray(data.data)) {
+          setRealChallenges(data.data.map((c: any) => ({
+            id: String(c.id),
+            title: c.title,
+            description: c.description,
+            status: c.status,
+            reward_points: c.reward_points,
+            reward_exp: c.reward_exp
+          })))
+        }
+      } catch (error) {
+        console.error('Failed to load challenge data:', error)
+      }
+    }
+    loadChallenges()
+    const interval = setInterval(loadChallenges, 5000) // 每5秒刷新一次
+    return () => clearInterval(interval)
   }, [])
 
   // HTTP 轮询以获取实时更新
@@ -192,10 +246,10 @@ const App: React.FC = () => {
         </div>
         <div className="lg:col-span-1 flex flex-col gap-6 h-full min-h-0">
           <div className="flex-shrink-0">
-            <PKBoardCard pks={generatedPks} teamsMap={teamsMap} students={students} />
+            <PKBoardCard pks={realPks.length > 0 ? realPks : generatedPks} teamsMap={teamsMap} students={students} />
           </div>
           <div className="flex-grow min-h-0">
-            <ChallengeArenaCard challenges={generatedChallenges} />
+            <ChallengeArenaCard challenges={realChallenges.length > 0 ? realChallenges : generatedChallenges} />
           </div>
         </div>
       </main>

@@ -698,8 +698,9 @@ app.delete('/api/tasks/:id', async (req, res) => {
 });
 
 /**
- * 颁发勋章
+ * 颁发勋章 (支持两种格式)
  */
+// 格式1: POST /api/students/{id}/badges/{badgeId}
 app.post('/api/students/:student_id/badges/:badge_id', async (req, res) => {
   try {
     const studentId = parseInt(req.params.student_id);
@@ -720,6 +721,64 @@ app.post('/api/students/:student_id/badges/:badge_id', async (req, res) => {
     });
   } catch (error) {
     console.error('Error awarding badge:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// 格式2: POST /api/students/{id}/badges (前端格式)
+app.post('/api/students/:student_id/badges', async (req, res) => {
+  try {
+    const studentId = parseInt(req.params.student_id);
+    const { badgeId } = req.body;
+
+    if (!badgeId) {
+      return res.status(400).json({
+        success: false,
+        error: 'badgeId is required',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO student_badges (student_id, badge_id, awarded_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT DO NOTHING
+       RETURNING student_id, badge_id`,
+      [studentId, parseInt(badgeId)]
+    );
+
+    res.status(201).json({
+      success: true,
+      data: result.rows[0] || { student_id: studentId, badge_id: badgeId },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error awarding badge:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * 获取所有勋章
+ */
+app.get('/api/badges', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT id, name, description, icon FROM badges');
+    res.json({
+      success: true,
+      data: result.rows,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error fetching badges:', error);
     res.status(500).json({
       success: false,
       error: error.message,
