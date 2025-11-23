@@ -616,18 +616,37 @@ app.put('/api/pk-matches/:id', async (req, res) => {
 });
 
 /**
- * 创建任务
+ * 创建任务（支持指定执行人）
  */
 app.post('/api/tasks', async (req, res) => {
   try {
-    const { title, description, exp_value = 0 } = req.body;
+    const { title, description, exp_value = 0, assigned_to = [] } = req.body;
 
+    // 1. 创建任务
     const result = await pool.query(
       `INSERT INTO tasks (title, description, exp_value)
        VALUES ($1, $2, $3)
        RETURNING id, title, description, exp_value`,
       [title, description || '', exp_value]
     );
+
+    const taskId = result.rows[0].id;
+
+    // 2. 如果指定了执行人，建立关联关系
+    if (assigned_to && Array.isArray(assigned_to) && assigned_to.length > 0) {
+      for (const studentId of assigned_to) {
+        try {
+          await pool.query(
+            `INSERT INTO task_assignments (task_id, student_id)
+             VALUES ($1, $2)
+             ON CONFLICT DO NOTHING`,
+            [taskId, parseInt(studentId)]
+          );
+        } catch (assignError) {
+          console.warn(`Failed to assign task to student ${studentId}:`, assignError);
+        }
+      }
+    }
 
     res.status(201).json({
       success: true,

@@ -162,10 +162,11 @@ function App() {
         })();
 
         // 并行加载所有数据
-        const [challengesRes, pksRes, badgesRes] = await Promise.all([
+        const [challengesRes, pksRes, badgesRes, tasksRes] = await Promise.all([
           fetch(`${apiUrl}/challenges`),
           fetch(`${apiUrl}/pk-matches`),
-          fetch(`${apiUrl}/badges`)
+          fetch(`${apiUrl}/badges`),
+          fetch(`${apiUrl}/tasks`)
         ]);
 
         // 处理挑战数据
@@ -209,6 +210,21 @@ function App() {
               name: b.name,
               description: b.description,
               icon: b.icon || '⭐'
+            })));
+          }
+        }
+
+        // 处理任务数据
+        if (tasksRes.ok) {
+          const tasksData = await tasksRes.json();
+          if (tasksData.success && Array.isArray(tasksData.data)) {
+            setTasks(tasksData.data.map((t: any) => ({
+              id: String(t.id),
+              title: t.title,
+              desc: t.description,
+              expValue: t.exp_value || 0,
+              createdAt: new Date().toISOString(),
+              assignedTo: []
             })));
           }
         }
@@ -512,6 +528,22 @@ function App() {
 
           const task = tasks.find(t => t.id === id);
           if (!task) return;
+
+          // 为所有执行人增加经验值（同步到数据库）
+          if (task.assignedTo && task.assignedTo.length > 0) {
+            await fetch(`${apiUrl}/students/scores/add`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                studentIds: task.assignedTo,
+                points: 0,  // 不加分
+                exp: task.expValue,  // 加经验值
+                reason: `任务完成: ${task.title}`,
+                category: 'task'
+              })
+            }).catch(err => console.error('Failed to add task exp:', err));
+          }
+
           const date = new Date().toISOString();
           // award exp and record history
           setStudents(prev => prev.map(s => {

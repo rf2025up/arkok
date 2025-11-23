@@ -341,7 +341,8 @@ const ClassManage: React.FC<ClassManageProps> = ({
                       body: JSON.stringify({
                           title: newTaskForm.title,
                           description: newTaskForm.desc,
-                          exp_value: exp
+                          exp_value: exp,
+                          assigned_to: newTaskForm.assignees  // 包含执行人信息
                       })
                   });
 
