@@ -123,7 +123,7 @@ const ClassManage: React.FC<ClassManageProps> = ({
 
   const handleSelectStudentClass = (studentId: string, className: string) => {
       setStudents(prev => prev.map(s => s.id === studentId ? { ...s, className } : s));
-      setSelectedStudent(prev => prev ? { ...(prev as Student), className } : prev);
+      // selectedStudent 会通过 useEffect 自动同步，无需手动更新
       setShowClassPicker(false);
   };
 
@@ -612,7 +612,7 @@ const ClassManage: React.FC<ClassManageProps> = ({
 
   const handleSelectStudentTeam = (studentId: string, teamId: string) => {
       setStudents(prev => prev.map(s => s.id === studentId ? { ...s, teamId } : s));
-      setSelectedStudent(prev => prev ? { ...(prev as Student), teamId } : prev);
+      // selectedStudent 会通过 useEffect 自动同步，无需手动更新
       setShowTeamPicker(false);
   };
 
@@ -806,10 +806,7 @@ const ClassManage: React.FC<ClassManageProps> = ({
             s.id === editingStudent.id ? { ...s, name: data.data.name } : s
           )
         );
-        // Update selected student display if they have the detail modal open
-        setSelectedStudent(prev =>
-          prev && prev.id === editingStudent.id ? { ...prev, name: data.data.name } : prev
-        );
+        // selectedStudent 会通过 useEffect 自动同步，无需手动更新
         setEditingStudent(null);
       } else {
         throw new Error('Invalid response from server');

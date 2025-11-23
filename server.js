@@ -103,13 +103,6 @@ app.get('/api-docs', (req, res) => {
   res.sendFile(path.join(__dirname, 'public/api-docs.html'));
 });
 
-// 模拟学生数据 API
-const mockStudents = [
-  { id: 1, name: '张三', score: 850, total_exp: 1200, level: 5, class_name: '黄老师班', avatar_url: '' },
-  { id: 2, name: '李四', score: 920, total_exp: 1500, level: 6, class_name: '黄老师班', avatar_url: '' },
-  { id: 3, name: '王五', score: 780, total_exp: 1000, level: 4, class_name: '姜老师班', avatar_url: '' },
-];
-
 /**
  * 获取所有学生数据
  */
@@ -124,7 +117,7 @@ app.get('/api/students', async (req, res) => {
         s.level,
         s.class_name,
         s.avatar_url,
-        json_object_agg(h.id, COALESCE(hc_count.count, 0)) as habit_stats
+        json_object_agg(h.id::text, COALESCE(hc_count.count, 0)) as habit_stats
       FROM students s
       LEFT JOIN habits h ON true
       LEFT JOIN (
@@ -143,10 +136,9 @@ app.get('/api/students', async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching students:', error);
-    // 如果数据库查询失败，返回 mock 数据作为备用
-    res.json({
-      success: true,
-      data: mockStudents,
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch students',
       timestamp: new Date().toISOString()
     });
   }
@@ -812,14 +804,6 @@ wss.on('connection', (ws) => {
     timestamp: new Date().toISOString()
   }));
 
-  // 定期推送学生数据更新
-  const interval = setInterval(() => {
-    ws.send(JSON.stringify({
-      type: 'students_update',
-      data: mockStudents,
-      timestamp: new Date().toISOString()
-    }));
-  }, 2000);
 
   // 接收客户端消息
   ws.on('message', (message) => {

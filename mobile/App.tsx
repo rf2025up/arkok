@@ -165,6 +165,9 @@ function App() {
         return `${protocol}//${host}/api`;
       })();
 
+      // 保存当前 habitStats，防止被覆盖
+      const currentHabitStats = new Map(students.map(s => [s.id, s.habitStats]));
+
       // 更新所有选中的学生
       for (const id of ids) {
         const response = await fetch(`${apiUrl}/students/${id}/adjust-score`, {
@@ -199,7 +202,7 @@ function App() {
               exp: apiStudent.total_exp || 0,
               level: apiStudent.level || 1,
               className: apiStudent.class_name || '未分配',
-              habitStats: apiStudent.habit_stats || {}
+              habitStats: apiStudent.habit_stats || currentHabitStats.get(String(apiStudent.id)) || {}
             }));
             setStudents(arr);
             refreshSucceeded = true;
@@ -252,11 +255,13 @@ function App() {
         }
 
         // 打卡完成后，从 API 重新获取学生数据以获得最新的 habitStats
+        let freshStudentData: any = null;
         try {
           const refreshResponse = await fetch(`${apiUrl}/students`);
           if (refreshResponse.ok) {
             const refreshData = await refreshResponse.json();
             if (refreshData.success && Array.isArray(refreshData.data)) {
+              freshStudentData = refreshData.data;
               const arr = refreshData.data.map((apiStudent: any) => ({
                 id: String(apiStudent.id),
                 name: apiStudent.name,
@@ -289,7 +294,7 @@ function App() {
           );
         }
 
-        // 同时更新积分
+        // 同时更新积分（handleUpdateScore 已优化为保留 habitStats）
         handleUpdateScore(studentIds, 5, '习惯打卡');
       } catch (error) {
         console.error('Error during habit check-in:', error);
