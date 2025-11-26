@@ -26,7 +26,7 @@ const BadgeDisplayCard: React.FC<{ student: Student, badge: Badge }> = ({ studen
             {/* Foreground Content */}
             <div className="relative z-10 flex flex-col justify-between h-full">
                 <div className="flex items-start gap-4">
-                    <img src={badge.image} alt={badge.name} className="w-20 h-20 rounded-full border-2 border-yellow-400 object-cover"/>
+                    <img src={student.avatar_url || '/assets/default-avatar.png'} alt={student.name} className="w-20 h-20 rounded-full border-2 border-yellow-400 object-cover"/>
                     <div className="flex-1 text-right">
                         <h3 className="text-lg font-bold">{student.name}</h3>
                         <p className="text-md font-semibold text-yellow-300">{badge.name}</p>
@@ -35,7 +35,7 @@ const BadgeDisplayCard: React.FC<{ student: Student, badge: Badge }> = ({ studen
                 <div>
                     <p className="text-sm text-slate-300 italic line-clamp-2">"{badge.description}"</p>
                     <div className="border-t border-slate-700 mt-2 pt-2 text-xs text-slate-400 text-right">
-                        加冕于: {fmt(badge.awardedDate)}
+                        加冕于: {fmt((badge as any).awarded_at || badge.awardedDate)}
                     </div>
                 </div>
             </div>
@@ -82,7 +82,7 @@ const HonorBadgesCard: React.FC<HonorBadgesCardProps> = ({ students }) => {
                 to { transform: translateX(-50%); }
             }
             .animate-scroll {
-                animation: scroll 50s linear infinite;
+                animation: scroll 80s linear infinite;
             }
             .pause {
                 animation-play-state: paused;

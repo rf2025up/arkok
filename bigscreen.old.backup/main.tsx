@@ -10,7 +10,7 @@ import HonorBadgesCard from './components/HonorBadgesCard'
 import PKBoardCard from './components/PKBoardCard'
 import { Student, Team, Challenge } from './types'
 import { getStudents, getTeams, getChallenges, getBadges, getPKs, getRecentTasks, initializeWebSocket, subscribeToStudentChanges, subscribeToStudentCreate, subscribeToChallengeChanges } from './services/sealosService'
-import { getConnectionStatus } from './services/websocket'
+import { getConnectionStatus, subscribe } from './services/websocket'
 
 const App: React.FC = () => {
   const [students, setStudents] = useState<Student[]>([])
@@ -24,6 +24,7 @@ const App: React.FC = () => {
     let unsubscribeStudent: (() => void) | null = null
     let unsubscribeStudentCreate: (() => void) | null = null
     let unsubscribeChallenge: (() => void) | null = null
+    let unsubscribeChallengeCreate: (() => void) | null = null
     let statusCheckInterval: NodeJS.Timeout | null = null
 
     const initialize = async () => {
@@ -79,6 +80,20 @@ const App: React.FC = () => {
           setChallenges(updatedChallenges)
         })
 
+        // 订阅新挑战创建事件
+        unsubscribeChallengeCreate = subscribe('challenge:created', (newChallenge: any) => {
+          setChallenges((prev) => [{
+            id: String(newChallenge.id),
+            title: newChallenge.title,
+            description: newChallenge.description,
+            status: newChallenge.status,
+            challenger: {
+              name: newChallenge.challenger_name || '未知挑战者',
+              avatar: newChallenge.challenger_avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=system'
+            }
+          }, ...prev])
+        })
+
         // Monitor connection status every 2 seconds
         statusCheckInterval = setInterval(() => {
           const status = getConnectionStatus()
@@ -97,6 +112,7 @@ const App: React.FC = () => {
       if (unsubscribeStudent) unsubscribeStudent()
       if (unsubscribeStudentCreate) unsubscribeStudentCreate()
       if (unsubscribeChallenge) unsubscribeChallenge()
+      if (unsubscribeChallengeCreate) unsubscribeChallengeCreate()
       if (statusCheckInterval) clearInterval(statusCheckInterval)
     }
   }, [])
@@ -114,10 +130,10 @@ const App: React.FC = () => {
           </LeaderboardCard>
         </div>
         <div className="lg:col-span-1 flex flex-col gap-6 h-full min-h-0">
-          <div className="flex-shrink-0">
-            <PKBoardCard pks={pks} teamsMap={teamsMap} />
+          <div className="h-1/2 min-h-0">
+            <PKBoardCard pks={pks} teamsMap={teamsMap} students={students} />
           </div>
-          <div className="flex-grow min-h-0">
+          <div className="h-1/2 min-h-0">
             <ChallengeArenaCard challenges={challenges} />
           </div>
         </div>

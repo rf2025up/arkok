@@ -1,14 +1,45 @@
 const { Pool } = require('pg');
+require('dotenv').config();
 
-const pool = new Pool({
-  connectionString: 'postgresql://postgres:4z2hdw8n@entr-postgresql.ns-ll4yxeb3.svc:5432/postgres'
-});
+const {
+  DATABASE_URL,
+  DB_HOST,
+  DB_PORT,
+  DB_USER,
+  DB_PASSWORD,
+  DB_NAME,
+} = process.env;
+
+const connectionString = DATABASE_URL ||
+  (DB_HOST && DB_PORT && DB_USER && DB_PASSWORD && DB_NAME
+    ? `postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}`
+    : undefined);
+
+const pool = connectionString
+  ? new Pool({ connectionString })
+  : new Pool({
+      host: DB_HOST || 'entr-postgresql.ns-ll4yxeb3.svc',
+      port: parseInt(DB_PORT || '5432', 10),
+      user: DB_USER || 'postgres',
+      password: DB_PASSWORD || '4z2hdw8n',
+      database: DB_NAME || 'postgres',
+    });
 
 async function createSchema() {
   const client = await pool.connect();
 
   try {
     console.log('🚀 开始创建新的数据库 Schema...\n');
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS students (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL UNIQUE,
+        score INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
 
     // ==================== 1. Teams 表 ====================
     console.log('📋 创建 Teams 表...');
@@ -32,11 +63,13 @@ async function createSchema() {
       ADD COLUMN IF NOT EXISTS total_exp INTEGER DEFAULT 0,
       ADD COLUMN IF NOT EXISTS level INTEGER DEFAULT 1,
       ADD COLUMN IF NOT EXISTS team_id INTEGER REFERENCES teams(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS group_id INTEGER REFERENCES groups(id) ON DELETE SET NULL,
       ADD COLUMN IF NOT EXISTS class_name VARCHAR(50);
     `);
 
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_students_team_id ON students(team_id);
+      CREATE INDEX IF NOT EXISTS idx_students_group_id ON students(group_id);
       CREATE INDEX IF NOT EXISTS idx_students_class_name ON students(class_name);
     `);
     console.log('✅ Students 表扩展成功\n');
@@ -211,13 +244,12 @@ async function createSchema() {
     // ==================== 14. 插入默认数据 ====================
     console.log('📋 插入默认数据...');
 
-    // 插入团队
+    // 插入团队（默认三支）
     await client.query(`
       INSERT INTO teams (name, color, text_color) VALUES
-        ('新星前锋', '#06b6d4', '#00d4ff'),
-        ('旋涡毒蛇', '#a855f7', '#c084fc'),
-        ('猩红守卫', '#ef4444', '#fca5a5'),
-        ('翡翠哨兵', '#10b981', '#6ee7b7')
+        ('天才少年', '#06b6d4', '#00d4ff'),
+        ('学霸无敌', '#a855f7', '#c084fc'),
+        ('超能少年', '#ef4444', '#fca5a5')
       ON CONFLICT (name) DO NOTHING;
     `);
     console.log('  ✅ 团队数据插入成功');
@@ -260,12 +292,12 @@ async function createSchema() {
     `);
     console.log('  ✅ 习惯数据插入成功');
 
-    // 创建默认分组
+    // 创建默认分组（老师班级）
     await client.query(`
       INSERT INTO groups (name, display_order, color) VALUES
-        ('A班', 1, '#667eea'),
-        ('B班', 2, '#764ba2'),
-        ('C班', 3, '#f093fb')
+        ('黄老师班', 1, '#667eea'),
+        ('姜老师班', 2, '#764ba2'),
+        ('龙老师班', 3, '#f093fb')
       ON CONFLICT (name) DO NOTHING;
     `);
     console.log('  ✅ 分组数据插入成功\n');

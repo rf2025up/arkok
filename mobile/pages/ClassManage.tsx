@@ -36,9 +36,9 @@ interface ClassManageProps {
   setTeacherClass?: (c: string) => void;
 }
 
-const ClassManage: React.FC<ClassManageProps> = ({ 
-  students, challenges, tasks, pkMatches, badges,
-  scorePresets, categoryNames, 
+const ClassManage: React.FC<ClassManageProps> = ({
+  students, challenges, tasks, pkMatches, badges, habits,
+  scorePresets, categoryNames,
   onUpdateScorePresets, onUpdateCategoryNames,
   onAddCategory, onChallengeStatus, onPKWinner, onGrantBadge, onAddBadge,
   setChallenges, setPkMatches, setStudents, setTasks, onCompleteTask, setBadges, classes, identity='teacher', teacherClass, setTeacherClass
@@ -78,17 +78,25 @@ const ClassManage: React.FC<ClassManageProps> = ({
   // -- Form State for Grant Badge (supports multi-select)
   const [grantBadgeForm, setGrantBadgeForm] = useState({ badgeId: '', studentIds: [] as string[] });
   const [badgeAssigneeSelectId, setBadgeAssigneeSelectId] = useState('');
+  const [badgeFeedback, setBadgeFeedback] = useState({ show: false, message: '' });
 
   // -- Form State for New Badge --
   const [newBadgeForm, setNewBadgeForm] = useState({ name: '', desc: '' });
   const [newStudentName, setNewStudentName] = useState('');
-  const [newStudentClass, setNewStudentClass] = useState('三年二班');
+  const [newStudentClass, setNewStudentClass] = useState('黄老师班');
   const [newTaskForm, setNewTaskForm] = useState({ title: '', desc: '', expValue: '', assignees: [] as string[] });
   const [challengeSelectId, setChallengeSelectId] = useState('');
   const [taskAssigneeSelectId, setTaskAssigneeSelectId] = useState('');
   const [editBadgeId, setEditBadgeId] = useState('');
   const [editBadgeName, setEditBadgeName] = useState('');
-  const [teams, setTeams] = useState<Array<{id: string, name: string}>>([]);
+  // 默认战队配置
+  const DEFAULT_TEAMS = ['天才少年', '学霸无敌', '超能少年'];
+  const [teams, setTeams] = useState<Array<{id: string, name: string}>>(
+    DEFAULT_TEAMS.map((name, index) => ({
+      id: `default-team-${index}`,
+      name: name
+    }))
+  );
   const [newTeamName, setNewTeamName] = useState('');
   const [editTeamId, setEditTeamId] = useState('');
   const [editTeamName, setEditTeamName] = useState('');
@@ -107,6 +115,10 @@ const ClassManage: React.FC<ClassManageProps> = ({
   const [challengeHistoryTab, setChallengeHistoryTab] = useState<'current' | 'past'>('current');
   const teamPressTimerRef = React.useRef<number | null>(null);
   const [showPresetDropdown, setShowPresetDropdown] = useState(false);
+
+  // 长按删除挑战
+  const [challengeToDelete, setChallengeToDelete] = useState<string | null>(null);
+  const challengePressTimerRef = React.useRef<number | null>(null);
 
   // -- Logic for Detail Modal --
   const getStudentChallenges = (studentId: string) => {
@@ -161,10 +173,63 @@ const ClassManage: React.FC<ClassManageProps> = ({
     });
   };
 
-  const handleMoveToTeacherClass = (ids: string[]) => {
+  const handleMoveToTeacherClass = async (ids: string[]) => {
     if (!teacherClass || ids.length === 0) return;
-    setStudents(prev => prev.map(s => ids.includes(s.id) ? { ...s, className: teacherClass } : s));
-    setBulkSelectedIds(new Set());
+
+    try {
+      // 获取 API 地址
+      const protocol = window.location.protocol;
+      const host = window.location.host;
+      const apiUrl = `${protocol}//${host}/api`;
+
+      // 批量更新学生班级（循环调用PUT API）
+      const updatePromises = ids.map(id =>
+        fetch(`${apiUrl}/students/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ class_name: teacherClass })
+        })
+      );
+
+      // 等待所有更新完成
+      const results = await Promise.all(updatePromises);
+
+      // 检查是否有失败的
+      const failed = results.filter(r => !r.ok);
+      if (failed.length > 0) {
+        console.error(`Failed to update ${failed.length} students`);
+        alert(`更新失败: ${failed.length}个学生更新失败，请重试`);
+        return;
+      }
+
+      // 更新成功后，重新从数据库加载学生列表
+      const refreshResponse = await fetch(`${apiUrl}/students`);
+      if (!refreshResponse.ok) {
+        throw new Error('Failed to refresh students');
+      }
+
+      const refreshData = await refreshResponse.json();
+      if (refreshData.success && Array.isArray(refreshData.data)) {
+        const arr = refreshData.data.map((apiStudent: any) => ({
+          id: String(apiStudent.id),
+          name: apiStudent.name,
+          avatar: apiStudent.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(apiStudent.name)}`,
+          points: apiStudent.score || 0,
+          exp: apiStudent.total_exp || 0,
+          level: apiStudent.level || 1,
+          className: apiStudent.class_name || '未分配',
+          habitStats: apiStudent.habit_stats || {},
+          teamId: apiStudent.team_id || undefined
+        }));
+
+        setStudents(arr);
+        setBulkSelectedIds(new Set());
+        alert(`成功将 ${ids.length} 个学生移动到 ${teacherClass}`);
+      }
+    } catch (error) {
+      console.error('Error updating student classes:', error);
+      alert('更新班级失败，请重试');
+    }
   };
 
   // -- Handlers --
@@ -287,6 +352,11 @@ const ClassManage: React.FC<ClassManageProps> = ({
               const host = window.location.host;
               const apiUrl = `${protocol}//${host}/api`;
 
+              // 使用第一个参与者作为挑战者
+              const challengerId = newChallenge.participantIds && newChallenge.participantIds.length > 0
+                  ? newChallenge.participantIds[0]
+                  : null;
+
               const response = await fetch(`${apiUrl}/challenges`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -295,7 +365,9 @@ const ClassManage: React.FC<ClassManageProps> = ({
                       description: newChallenge.desc,
                       status: 'active',
                       reward_points: isNaN(pts) ? 10 : pts,
-                      reward_exp: isNaN(exp) ? 0 : exp
+                      reward_exp: isNaN(exp) ? 0 : exp,
+                      challenger_id: challengerId,
+                      participant_ids: newChallenge.participantIds || []
                   })
               });
 
@@ -307,12 +379,15 @@ const ClassManage: React.FC<ClassManageProps> = ({
               const data = await response.json();
               if (data.success && data.data) {
                   // 将新挑战添加到数组头部（显示在第一行）
+                  // 从API返回的participants中提取student_id
+                  const participantIds = (data.data.participants || []).map((p: any) => String(p.student_id));
+
                   setChallenges(prev => [{
                       id: String(data.data.id),
                       title: data.data.title,
                       desc: data.data.description,
                       status: data.data.status,
-                      participants: (newChallenge.participantIds && newChallenge.participantIds.length>0) ? newChallenge.participantIds : [],
+                      participants: participantIds,
                       rewardPoints: data.data.reward_points,
                       rewardExp: data.data.reward_exp,
                       date: new Date().toISOString()
@@ -323,6 +398,46 @@ const ClassManage: React.FC<ClassManageProps> = ({
           }
 
           setNewChallenge({ title: '', desc: '', participantIds: [], rewardPoints: '', rewardExp: '' } as any);
+      }
+  };
+
+  // 删除挑战
+  const handleDeleteChallenge = async (challengeId: string) => {
+      try {
+          const protocol = window.location.protocol;
+          const host = window.location.host;
+          const apiUrl = `${protocol}//${host}/api`;
+
+          const response = await fetch(`${apiUrl}/challenges/${challengeId}`, {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' }
+          });
+
+          if (!response.ok) {
+              console.error('Failed to delete challenge:', response.statusText);
+              return;
+          }
+
+          // 从本地状态中删除
+          setChallenges(prev => prev.filter(c => c.id !== challengeId));
+          setChallengeToDelete(null);
+      } catch (error) {
+          console.error('Error deleting challenge:', error);
+      }
+  };
+
+  // 长按开始
+  const handleChallengePressStart = (challengeId: string) => {
+      challengePressTimerRef.current = window.setTimeout(() => {
+          setChallengeToDelete(challengeId);
+      }, 500); // 500ms 长按触发
+  };
+
+  // 长按结束
+  const handleChallengePressEnd = () => {
+      if (challengePressTimerRef.current) {
+          clearTimeout(challengePressTimerRef.current);
+          challengePressTimerRef.current = null;
       }
   };
 
@@ -544,8 +659,19 @@ const ClassManage: React.FC<ClassManageProps> = ({
 
   const handleGrantBadgeSubmit = () => {
       if(grantBadgeForm.badgeId && grantBadgeForm.studentIds.length) {
+          const badge = badges.find(b => b.id === grantBadgeForm.badgeId);
+          const studentCount = grantBadgeForm.studentIds.length;
           grantBadgeForm.studentIds.forEach(id => onGrantBadge(grantBadgeForm.badgeId, id));
           setGrantBadgeForm({ badgeId: '', studentIds: [] });
+
+          // Show success feedback
+          setBadgeFeedback({
+              show: true,
+              message: `✅ 已为 ${studentCount} 位学生授予「${badge?.name || '勋章'}」！`
+          });
+          setTimeout(() => {
+              setBadgeFeedback({ show: false, message: '' });
+          }, 2000);
       }
   };
 
@@ -672,7 +798,8 @@ const ClassManage: React.FC<ClassManageProps> = ({
       const taskRows = [['任务名称','参与日期','完成','经验值'], ...((student.taskHistory||[]).filter(r=>inRange(r.date)).map(r=>[r.title, toDateStr(r.date), '是', String(r.exp||0)]))];
       const challengeRows = [['挑战名称','挑战日期','结果'], ...((student.challengeHistory||[]).filter(c=>inRange(c.date)).map(c=>[c.title, c.date?toDateStr(c.date):'', c.result||'']))];
       const pkRows = [['对手','主题','结果','日期'], ...((student.pkHistory||[]).filter(p=>inRange(p.date)).map(p=>[p.opponentName||p.opponentId, p.topic, p.result, toDateStr(p.date)]))];
-      const habitRows = [['习惯名称','打卡天数'], ...(habits.map(h=>[h.name, String(student.habitStats?.[h.id]||0)]))];
+      const safeHabits = Array.isArray(habits) ? habits : [];
+      const habitRows = [['习惯名称','打卡天数'], ...(safeHabits.map(h=>[h.name, String(student.habitStats?.[h.id]||0)]))];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(infoRows), '个人信息');
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(badgeRows), '荣誉数据');
@@ -689,7 +816,8 @@ const ClassManage: React.FC<ClassManageProps> = ({
       const taskRows = (student.taskHistory||[]).filter(r=>inRange(r.date)).map(r=>[r.title, toDateStr(r.date), '是', String(r.exp||0)]);
       const challengeRows = (student.challengeHistory||[]).filter(c=>inRange(c.date)).map(c=>[c.title, c.date?toDateStr(c.date):'', c.result||'']);
       const pkRows = (student.pkHistory||[]).filter(p=>inRange(p.date)).map(p=>[p.opponentName||p.opponentId, p.topic, p.result, toDateStr(p.date)]);
-      const habitRows = habits.map(h=>[h.name, String(student.habitStats?.[h.id]||0)]);
+      const safeHabits = Array.isArray(habits) ? habits : [];
+      const habitRows = safeHabits.map(h=>[h.name, String(student.habitStats?.[h.id]||0)]);
       const esc = (s: string) => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
       const table = (title: string, headers: string[], rows: string[][]) => `
         <h3 style="font-weight:bold;">${esc(title)}</h3>
@@ -729,6 +857,14 @@ const ClassManage: React.FC<ClassManageProps> = ({
     const cls = newStudentClass.trim() || '未知';
     const avatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}`;
 
+    // 默认战队名称
+    const DEFAULT_TEAMS = ['天才少年', '学霸无敌', '超能少年'];
+    // 随机选择一个战队
+    const randomTeamName = DEFAULT_TEAMS[Math.floor(Math.random() * DEFAULT_TEAMS.length)];
+    // 查找或创建战队
+    const existingTeam = teams.find(t => t.name === randomTeamName);
+    const teamId = existingTeam ? existingTeam.id : `team-${Date.now()}`;
+
     try {
       // 获取 API 地址
       const protocol = window.location.protocol;
@@ -745,7 +881,8 @@ const ClassManage: React.FC<ClassManageProps> = ({
           avatar_url: avatar,
           score: 0,
           total_exp: 0,
-          level: 1
+          level: 1,
+          team_name: randomTeamName
         })
       });
 
@@ -757,6 +894,11 @@ const ClassManage: React.FC<ClassManageProps> = ({
       const data = await response.json();
 
       if (data.success && data.data) {
+        // 如果战队不存在，创建新战队
+        if (!existingTeam) {
+          setTeams(prev => [...prev, { id: teamId, name: randomTeamName }]);
+        }
+
         // 使用数据库返回的学生数据更新前端状态
         const newStudent = {
           id: String(data.data.id),
@@ -766,13 +908,12 @@ const ClassManage: React.FC<ClassManageProps> = ({
           exp: data.data.total_exp || 0,
           level: data.data.level || 1,
           className: data.data.class_name || cls,
-          teamId: newStudentTeamId || undefined
+          teamId: teamId
         };
         setStudents(prev => [...prev, newStudent]);
         setIsAddStudentOpen(false);
         setNewStudentName('');
-        setNewStudentClass('三年二班');
-        setNewStudentTeamId('');
+        setNewStudentClass('黄老师班');
       } else {
         console.error('Invalid response from server:', data);
       }
@@ -851,18 +992,26 @@ const ClassManage: React.FC<ClassManageProps> = ({
   const renderStudentDetailModal = () => {
     if (!selectedStudent) return null;
 
-    const allChallenges = getStudentChallenges(selectedStudent.id);
-    const thisWeekChallenges = allChallenges.filter(c => {
-        const date = c.date ? new Date(c.date) : new Date();
-        const now = new Date();
-        const diff = now.getTime() - date.getTime();
-        return diff < 7 * 24 * 60 * 60 * 1000;
-    });
-    
-    const studentPKs = getStudentPKHistory(selectedStudent.id);
-    const studentBadges = badges.slice(0, 3 + Math.floor(Math.random() * 3)); // Mock random badges
+    try {
+      const allChallenges = getStudentChallenges(selectedStudent.id) || [];
+      const thisWeekChallenges = allChallenges.filter(c => {
+          const date = c.date ? new Date(c.date) : new Date();
+          const now = new Date();
+          const diff = now.getTime() - date.getTime();
+          return diff < 7 * 24 * 60 * 60 * 1000;
+      });
 
-    return (
+      const studentPKs = getStudentPKHistory(selectedStudent.id) || [];
+      // 使用API返回的badges数据
+      const studentBadges = (selectedStudent.badges || []).map((badge: any) => ({
+        id: badge.id,
+        name: badge.name,
+        icon: badge.icon || '⭐',
+        description: badge.description || '',
+        awardedDate: badge.awarded_at
+      }));
+
+      return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 animate-in fade-in backdrop-blur-sm">
             <div className="bg-white w-full max-w-md rounded-3xl overflow-hidden shadow-2xl max-h-[90vh] overflow-y-auto relative animate-in zoom-in-95 duration-200 no-scrollbar flex flex-col">
                 {/* Header */}
@@ -907,7 +1056,7 @@ const ClassManage: React.FC<ClassManageProps> = ({
                             <div className="relative flex-1 h-[56px]">
                                 <div className="grid grid-rows-2 gap-1 h-full">
                                     <div onClick={()=>{ setShowTeamPicker(v=>!v); setShowClassPicker(false); }} className="px-4 py-1 rounded-xl bg-primary/10 border border-primary/20 text-primary text-xs font-bold whitespace-nowrap overflow-x-auto no-scrollbar inline-flex items-center cursor-pointer">
-                                        {teams.find(t=>t.id===selectedStudent.teamId)?.name || '未分队'}
+                                        {(teams || []).find(t=>t.id===selectedStudent.teamId)?.name || '未分队'}
                                     </div>
                                     <div onClick={()=>{ setShowClassPicker(v=>!v); setShowTeamPicker(false); }} className="px-4 py-1 rounded-xl bg-primary/10 border border-primary/20 text-primary text-xs font-bold whitespace-nowrap overflow-x-auto no-scrollbar inline-flex items-center cursor-pointer">
                                         {selectedStudent.className || '未分班'}
@@ -917,7 +1066,7 @@ const ClassManage: React.FC<ClassManageProps> = ({
                                   <div className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-lg border p-2">
                                     <select value={selectedStudent.teamId || ''} onChange={e=>handleSelectStudentTeam(selectedStudent.id, e.target.value)} className="w-full p-2 rounded-xl bg-gray-50 text-sm outline-none">
                                       <option value="">未分队</option>
-                                      {teams.map(t=> (<option key={t.id} value={t.id}>{t.name}</option>))}
+                                      {(teams || []).map(t=> (<option key={t.id} value={t.id}>{t.name}</option>))}
                                     </select>
                                   </div>
                                 )}
@@ -942,18 +1091,31 @@ const ClassManage: React.FC<ClassManageProps> = ({
                                 <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-md">{studentBadges.length} 枚</span>
                              </div>
                              {(() => {
-                               const badgePages = chunk(studentBadges, 12);
+                               const badgePages = chunk(studentBadges, 6);
                                const bp = Math.min(badgePage, Math.max(0, badgePages.length - 1));
                                const badgeItems = badgePages[bp] || [];
+                               const formatDate = (dateStr?: string) => {
+                                 if (!dateStr) return '';
+                                 const d = new Date(dateStr);
+                                 const y = d.getFullYear();
+                                 const m = `${d.getMonth()+1}`.padStart(2,'0');
+                                 const dd = `${d.getDate()}`.padStart(2,'0');
+                                 return `${y}-${m}-${dd}`;
+                               };
                                return (
                                  <div className="bg-gray-50 p-3 rounded-2xl border border-gray-100">
                                    {badgeItems.length > 0 ? (
-                                     <div className="grid grid-cols-3 gap-2">
+                                     <div className="grid grid-cols-2 gap-3">
                                        {badgeItems.map((b, i) => (
-                                         <span key={`${b.id}-${i}`} className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white border border-gray-200 text-gray-700 text-xs font-bold">
-                                           <span>⭐</span>
-                                           <span>{b.name}</span>
-                                         </span>
+                                         <div key={`${b.id}-${i}`} className="flex flex-col p-2 rounded-lg bg-white border border-gray-200 shadow-sm">
+                                           <div className="flex items-center gap-2 mb-1">
+                                             <span className="text-lg">{b.icon}</span>
+                                             <span className="text-xs font-bold text-gray-700">{b.name}</span>
+                                           </div>
+                                           <div className="text-[10px] text-gray-400 mt-1">
+                                             授予日期: {formatDate((b as any).awarded_at)}
+                                           </div>
+                                         </div>
                                        ))}
                                      </div>
                                    ) : (
@@ -975,106 +1137,76 @@ const ClassManage: React.FC<ClassManageProps> = ({
                                  <CheckCircle size={16} className="mr-2 text-blue-500"/> 习惯统计
                              </h3>
                              {(() => {
-                               const pages = chunk((habits || []), 9);
+                               const safeHabits = habits || [];
+                               const pages = chunk(safeHabits, 9);
                                const page = Math.min(habitPage, Math.max(0, pages.length-1));
                                const pageItems = pages[page] || [];
                                return (
                                  <div>
                                    <div className="grid grid-cols-3 gap-2">
-                                     {pageItems.map(h => (
+                                     {pageItems.length > 0 ? pageItems.map(h => (
                                        <div key={h.id} className="bg-white border border-blue-100 p-2 rounded-xl shadow-sm flex flex-col items-center justify-center min-h-[64px]">
                                          <span className="text-sm text-gray-800 font-bold mb-0.5">{h.name}</span>
                                          <span className="text-lg font-black text-blue-600">{selectedStudent.habitStats?.[h.id] || 0}</span>
                                        </div>
-                                     ))}
+                                     )) : (
+                                       <div className="col-span-3 text-center text-xs text-gray-400 py-3 bg-gray-50 rounded-xl border border-dashed">
+                                         暂无习惯数据
+                                       </div>
+                                     )}
                                    </div>
-                                   <div className="mt-2 flex items-center justify-between">
-                                     <button onClick={()=> setHabitPage(p => Math.max(0, p-1))} className="px-2 py-1 rounded-md bg-blue-50 text-blue-600 text-[10px] font-bold">上一页</button>
-                                     <span className="text-[10px] text-gray-500">{pages.length>0 ? page+1 : 0}/{pages.length}</span>
-                                     <button onClick={()=> setHabitPage(p => Math.min(pages.length-1, p+1))} className="px-2 py-1 rounded-md bg-blue-50 text-blue-600 text-[10px] font-bold">下一页</button>
-                                   </div>
+                                   {pages.length > 1 && (
+                                     <div className="mt-2 flex items-center justify-between">
+                                       <button onClick={()=> setHabitPage(p => Math.max(0, p-1))} className="px-2 py-1 rounded-md bg-blue-50 text-blue-600 text-[10px] font-bold">上一页</button>
+                                       <span className="text-[10px] text-gray-500">{pages.length>0 ? page+1 : 0}/{pages.length}</span>
+                                       <button onClick={()=> setHabitPage(p => Math.min(pages.length-1, p+1))} className="px-2 py-1 rounded-md bg-blue-50 text-blue-600 text-[10px] font-bold">下一页</button>
+                                     </div>
+                                   )}
                                  </div>
                                );
                              })()}
                         </div>
 
-                        {/* Challenge History */}
-                        <div className="w-full mt-6">
-                             <div className="flex justify-between items-center mb-3">
-                                 <h3 className="text-sm font-bold text-gray-800 flex items-center">
-                                     <Trophy size={16} className="mr-2 text-orange-500"/> 挑战记录
-                                 </h3>
-                             </div>
-                             
-                             <div className="space-y-2.5">
-                                 <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">本周</h4>
-                                {((thisWeekChallenges || []).length > 0) ? (thisWeekChallenges || []).map(c => (
-                                     <div key={c.id} className="flex justify-between items-center bg-white p-3 rounded-xl border border-gray-100 shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
-                                         <div className="flex items-center">
-                                            <div className={`w-2 h-2 rounded-full mr-3 ${c.result === 'success' ? 'bg-green-500' : (c.result === 'fail' ? 'bg-red-500' : 'bg-yellow-500')}`}></div>
-                                            <div>
-                                                <div className="text-xs font-bold text-gray-800">{c.title}</div>
-                                                <div className="text-[10px] text-gray-400">{c.desc}</div>
-                                            </div>
-                                         </div>
-                                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                                             c.result === 'success' ? 'bg-green-50 text-green-600' : (c.result === 'fail' ? 'bg-red-50 text-red-600' : 'bg-yellow-50 text-yellow-600')
-                                         }`}>
-                                             {c.result === 'success' ? '+积分' : (c.result === 'fail' ? '失败' : '进行中')}
-                                         </span>
-                                     </div>
-                                 )) : (
-                                     <div className="text-center text-xs text-gray-400 py-3 bg-gray-50 rounded-xl border border-dashed">本周无挑战记录</div>
-                                 )}
-
-                                 {/* Past Challenges Link/Section */}
-                                 <div className="pt-2">
-                                     <div className="flex items-center justify-between mb-2">
-                                        <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">过往记录</h4>
-                                     </div>
-                                     {((allChallenges || []).length > (thisWeekChallenges || []).length) ? (
-                                         <div className="space-y-2 opacity-70">
-                                             {(allChallenges || []).filter(c => !((thisWeekChallenges || []).includes(c))).map(c => (
-                                                 <div key={c.id} className="flex justify-between items-center bg-gray-50 p-2.5 rounded-xl border border-gray-100">
-                                                     <span className="text-xs text-gray-600">{c.title}</span>
-                                                     <span className="text-[10px] text-gray-400">{c.result === 'success' ? '已完成' : '未完成'}</span>
-                                                 </div>
-                                             ))}
-                                         </div>
-                                     ) : (
-                                         <div className="text-[10px] text-gray-400 text-center italic">暂无更多历史记录</div>
-                                     )}
-                                 </div>
-                             </div>
-                        </div>
-
                         {/* PK History */}
                         <div className="w-full mt-6 mb-6">
-                             <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center">
-                                 <Swords size={16} className="mr-2 text-red-500"/> PK 对决记录
-                             </h3>
-                             <div className="space-y-2.5">
-                                {((studentPKs || []).length > 0) ? (studentPKs || []).map(pk => {
-                                     const opponentId = pk.studentA === selectedStudent.id ? pk.studentB : pk.studentA;
-                                     const opponent = students.find(s => s.id === opponentId);
-                                     const isWinner = pk.winnerId === selectedStudent.id;
-                                     
-                                     return (
-                                         <div key={pk.id} className="flex justify-between items-center bg-white p-3 rounded-xl border border-gray-100 shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
-                                             <div className="flex items-center space-x-3">
-                                                 <span className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full ${isWinner ? 'bg-yellow-100 text-yellow-600' : 'bg-gray-100 text-gray-400'}`}>
-                                                     {isWinner ? '胜' : '败'}
-                                                 </span>
-                                                 <div className="flex flex-col">
-                                                     <span className="text-xs font-bold text-gray-700">vs {opponent?.name || '未知'}</span>
-                                                     <span className="text-[10px] text-gray-400">{pk.topic}</span>
-                                                 </div>
-                                             </div>
-                                         </div>
-                                     );
-                                 }) : (
-                                     <div className="text-center text-xs text-gray-400 py-3 bg-gray-50 rounded-xl border border-dashed">暂无PK记录</div>
-                                 )}
+                             <div className="flex items-center justify-between mb-3">
+                                 <h3 className="text-sm font-bold text-gray-800 flex items-center">
+                                     <Swords size={16} className="mr-2 text-red-500"/> PK 对决记录
+                                 </h3>
+                                 <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-md">
+                                   {selectedStudent.pkHistory ? selectedStudent.pkHistory.length : 0} 场
+                                 </span>
+                             </div>
+                             <div className="max-h-[300px] overflow-y-auto space-y-2.5 pr-1">
+                                {(selectedStudent.pkHistory && selectedStudent.pkHistory.length > 0) ? (
+                                  selectedStudent.pkHistory
+                                    .filter(pk => {
+                                      const pkDate = new Date(pk.date);
+                                      const oneMonthAgo = new Date();
+                                      oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+                                      return pkDate >= oneMonthAgo;
+                                    })
+                                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                                    .map(pk => {
+                                      const isWinner = pk.result === 'win';
+                                      return (
+                                        <div key={pk.id} className="flex justify-between items-center bg-white p-3 rounded-xl border border-gray-100 shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
+                                            <div className="flex items-center space-x-3 flex-1">
+                                                <span className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full ${isWinner ? 'bg-yellow-100 text-yellow-600' : 'bg-gray-100 text-gray-400'}`}>
+                                                    {isWinner ? '胜' : '败'}
+                                                </span>
+                                                <div className="flex flex-col flex-1">
+                                                    <span className="text-xs font-bold text-gray-700">vs {pk.opponentName || '未知'}</span>
+                                                    <span className="text-[10px] text-gray-400">{pk.topic}</span>
+                                                </div>
+                                            </div>
+                                            <span className="text-[10px] text-gray-400">{new Date(pk.date).toLocaleDateString()}</span>
+                                        </div>
+                                      );
+                                    })
+                                ) : (
+                                    <div className="text-center text-xs text-gray-400 py-3 bg-gray-50 rounded-xl border border-dashed">暂无PK记录</div>
+                                )}
                              </div>
                         </div>
 
@@ -1083,20 +1215,88 @@ const ClassManage: React.FC<ClassManageProps> = ({
                                  <h3 className="text-sm font-bold text-gray-800 flex items-center">
                                      <ScrollText size={16} className="mr-2 text-green-600"/> 任务记录
                                  </h3>
+                                 <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-md">
+                                   {selectedStudent.taskHistory ? selectedStudent.taskHistory.length : 0} 个
+                                 </span>
                              </div>
-                             <div className="space-y-2.5">
+                             <div className="max-h-[300px] overflow-y-auto space-y-2.5 pr-1">
                                  {(selectedStudent.taskHistory && selectedStudent.taskHistory.length>0) ? (
-                                     selectedStudent.taskHistory.map(rec => (
-                                         <div key={rec.id} className="flex items-center justify-between bg-white p-3 rounded-xl border border-gray-100">
-                                             <div className="flex flex-col">
-                                                 <span className="text-xs font-bold text-gray-800">{rec.title}</span>
-                                                 <span className="text-[10px] text-gray-400">{new Date(rec.date).toLocaleDateString()}</span>
-                                             </div>
-                                             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">经验 + {rec.exp}</span>
-                                         </div>
-                                     ))
+                                     selectedStudent.taskHistory
+                                       .filter(rec => {
+                                         const taskDate = new Date(rec.date);
+                                         const oneMonthAgo = new Date();
+                                         oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+                                         return taskDate >= oneMonthAgo;
+                                       })
+                                       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                                       .map(rec => {
+                                         const task = tasks.find(t => t.id === rec.taskId);
+                                         const isCompleted = !task; // 如果任务不在tasks列表中，说明已完成
+                                         return (
+                                           <div key={rec.id} className="flex items-center justify-between bg-white p-3 rounded-xl border border-gray-100">
+                                               <div className="flex flex-col flex-1">
+                                                   <div className="flex items-center gap-2">
+                                                     <span className="text-xs font-bold text-gray-800">{rec.title}</span>
+                                                     {isCompleted ? (
+                                                       <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-green-100 text-green-600">已完成</span>
+                                                     ) : (
+                                                       <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-600">进行中</span>
+                                                     )}
+                                                   </div>
+                                                   <span className="text-[10px] text-gray-400">{new Date(rec.date).toLocaleDateString()}</span>
+                                               </div>
+                                               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">经验 + {rec.exp}</span>
+                                           </div>
+                                         );
+                                       })
                                  ) : (
                                      <div className="text-center text-xs text-gray-400 py-3 bg-gray-50 rounded-xl border border-dashed">暂无任务记录</div>
+                                 )}
+                             </div>
+                        </div>
+
+                        <div className="w-full mt-6 mb-6">
+                             <div className="flex items-center justify-between mb-3">
+                                 <h3 className="text-sm font-bold text-gray-800 flex items-center">
+                                     <Trophy size={16} className="mr-2 text-purple-600"/> 挑战记录
+                                 </h3>
+                                 <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-md">
+                                   {selectedStudent.challengeHistory ? selectedStudent.challengeHistory.length : 0} 个
+                                 </span>
+                             </div>
+                             <div className="max-h-[300px] overflow-y-auto space-y-2.5 pr-1">
+                                 {(selectedStudent.challengeHistory && selectedStudent.challengeHistory.length>0) ? (
+                                     selectedStudent.challengeHistory
+                                       .filter(rec => {
+                                         const challengeDate = new Date(rec.date);
+                                         const oneMonthAgo = new Date();
+                                         oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+                                         return challengeDate >= oneMonthAgo;
+                                       })
+                                       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                                       .map(rec => (
+                                         <div key={rec.id} className="flex items-center justify-between bg-white p-3 rounded-xl border border-gray-100">
+                                             <div className="flex flex-col flex-1">
+                                                 <div className="flex items-center gap-2">
+                                                   <span className="text-xs font-bold text-gray-800">{rec.title}</span>
+                                                   {rec.result === 'success' ? (
+                                                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-green-100 text-green-600">成功</span>
+                                                   ) : (
+                                                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600">失败</span>
+                                                   )}
+                                                 </div>
+                                                 <span className="text-[10px] text-gray-400">{new Date(rec.date).toLocaleDateString()}</span>
+                                             </div>
+                                             <div className="flex flex-col items-end gap-0.5">
+                                               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-50 text-orange-600">积分 + {rec.points}</span>
+                                               {rec.exp && rec.exp > 0 && (
+                                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">经验 + {rec.exp}</span>
+                                               )}
+                                             </div>
+                                         </div>
+                                       ))
+                                 ) : (
+                                     <div className="text-center text-xs text-gray-400 py-3 bg-gray-50 rounded-xl border border-dashed">暂无挑战记录</div>
                                  )}
                              </div>
                         </div>
@@ -1122,7 +1322,24 @@ const ClassManage: React.FC<ClassManageProps> = ({
                 </div>
             </div>
         </div>
-    );
+      );
+    } catch (error) {
+      console.error('渲染学生详情面板时出错:', error);
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl p-8 text-center">
+            <h3 className="text-lg font-bold text-red-600 mb-4">加载失败</h3>
+            <p className="text-sm text-gray-600 mb-4">学生信息加载出错，请稍后重试</p>
+            <button
+              onClick={() => setSelectedStudent(null)}
+              className="px-4 py-2 rounded-xl bg-primary text-white text-sm font-bold"
+            >
+              关闭
+            </button>
+          </div>
+        </div>
+      );
+    }
   }
 
   const renderAddStudentModal = () => {
@@ -1132,17 +1349,10 @@ const ClassManage: React.FC<ClassManageProps> = ({
             <div className="bg-white w-full max-w-xs rounded-2xl p-5 shadow-xl animate-in slide-in-from-bottom-5">
                 <h3 className="font-bold text-lg text-gray-800 mb-4 text-center">新增学生</h3>
                 <div className="space-y-3">
-                    <select value={newStudentName} onChange={e=>setNewStudentName(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary">
-                      <option value="">选择学生</option>
-                      {students.map(s=> (<option key={s.id} value={s.id}>{s.name}</option>))}
-                    </select>
+                    <input value={newStudentName} onChange={e=>setNewStudentName(e.target.value)} placeholder="输入学生姓名" className="w-full p-3 bg-gray-50 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary" />
                     <select value={newStudentClass} onChange={e=>setNewStudentClass(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary">
                       <option value="">选择班级</option>
-                      {classes.map(c=> (<option key={c} value={c}>{c}</option>))}
-                    </select>
-                    <select value={newStudentTeamId} onChange={e=>setNewStudentTeamId(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-sm outline-none">
-                      <option value="">选择战队</option>
-                      {teams.map(t=> (<option key={t.id} value={t.id}>{t.name}</option>))}
+                      {(['黄老师班','姜老师班','龙老师班']).map(c=> (<option key={c} value={c}>{c}</option>))}
                     </select>
                     <div className="flex gap-3 pt-2">
                       <button
@@ -1225,28 +1435,28 @@ const ClassManage: React.FC<ClassManageProps> = ({
               })}
             </div>
             <div className="mt-3 text-center text-xs text-gray-500">{identity==='principal' ? '全校学生' : (teacherClass || classes[0] || '本班级')}：{visibleStudents.length} 位</div>
-            <div className="fixed bottom-24 left-0 right-0 px-4 z-30">
-              <div className="bg-white rounded-2xl shadow-lg p-3 border border-gray-100">
-                <div className="mt-1 flex flex-wrap gap-2">
-                  <button onMouseDown={()=>handleTeamCapsulePressStart('new','新增战队')} onMouseUp={handleTeamCapsulePressEnd} onMouseLeave={handleTeamCapsulePressEnd} onClick={()=>{setEditTeamId('new'); setEditTeamName('');}} className="px-2 py-1 rounded-full bg-primary text-white text-[10px]">+ 新增战队</button>
-                  {teams.map(t => (
-                    <span
-                      key={t.id}
-                      onMouseDown={()=>handleTeamCapsulePressStart(t.id, t.name)}
-                      onMouseUp={handleTeamCapsulePressEnd}
-                      onMouseLeave={handleTeamCapsulePressEnd}
-                      className="px-2 py-1 rounded-full bg-primary text-white text-[10px] select-none"
-                    >{t.name}</span>
-                  ))}
-                </div>
-                {editTeamId !== '' && (
-                  <div className="mt-2 grid grid-cols-3 gap-2">
-                    <input value={editTeamName} onChange={e=>setEditTeamName(e.target.value)} placeholder="战队名称" className="p-2 rounded-xl bg-gray-50 text-sm outline-none" />
-                    <button onClick={()=>{ if(editTeamId==='new'){ if(editTeamName.trim()){ setTeams(prev=>[...prev,{id:`team-${Date.now()}`, name: editTeamName.trim()}]); setEditTeamId(''); setEditTeamName(''); } } else { handleSaveTeamName(); } }} className="p-2 rounded-xl bg-primary text-white text-sm font-bold">保存</button>
-                    <button onClick={()=>{ setEditTeamId(''); setEditTeamName(''); }} className="p-2 rounded-xl bg-gray-100 text-gray-700 text-sm font-bold">取消</button>
-                  </div>
-                )}
+            {/* 战队管理面板 - 非悬浮，放在页面底部 */}
+            <div className="mt-4 bg-white rounded-2xl shadow-lg p-3 border border-gray-100">
+              <div className="mb-2 text-xs font-bold text-gray-600">战队管理</div>
+              <div className="flex flex-wrap gap-2">
+                <button onMouseDown={()=>handleTeamCapsulePressStart('new','新增战队')} onMouseUp={handleTeamCapsulePressEnd} onMouseLeave={handleTeamCapsulePressEnd} onClick={()=>{setEditTeamId('new'); setEditTeamName('');}} className="px-2 py-1 rounded-full bg-primary text-white text-[10px]">+ 新增战队</button>
+                {teams.map(t => (
+                  <span
+                    key={t.id}
+                    onMouseDown={()=>handleTeamCapsulePressStart(t.id, t.name)}
+                    onMouseUp={handleTeamCapsulePressEnd}
+                    onMouseLeave={handleTeamCapsulePressEnd}
+                    className="px-2 py-1 rounded-full bg-primary text-white text-[10px] select-none"
+                  >{t.name}</span>
+                ))}
               </div>
+              {editTeamId !== '' && (
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  <input value={editTeamName} onChange={e=>setEditTeamName(e.target.value)} placeholder="战队名称" className="p-2 rounded-xl bg-gray-50 text-sm outline-none" />
+                  <button onClick={()=>{ if(editTeamId==='new'){ if(editTeamName.trim()){ setTeams(prev=>[...prev,{id:`team-${Date.now()}`, name: editTeamName.trim()}]); setEditTeamId(''); setEditTeamName(''); } } else { handleSaveTeamName(); } }} className="p-2 rounded-xl bg-primary text-white text-sm font-bold">保存</button>
+                  <button onClick={()=>{ setEditTeamId(''); setEditTeamName(''); }} className="p-2 rounded-xl bg-gray-100 text-gray-700 text-sm font-bold">取消</button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1322,6 +1532,54 @@ const ClassManage: React.FC<ClassManageProps> = ({
               </div>
             </div>
 
+            {/* 新增预设面板 - 非悬浮，放在页面底部 */}
+            <div className="bg-white rounded-3xl p-4 shadow-sm">
+              <div className="mb-3"><span className="inline-block px-3 py-1 rounded-full bg-green-500 text-white text-xs font-bold">新增积分预设</span></div>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1">所属类别</label>
+                  <input
+                    value={newPresetCategory}
+                    onChange={e=>setNewPresetCategory(e.target.value)}
+                    placeholder="输入新类别名称（留空则使用当前选中类别）"
+                    className="w-full p-2 rounded-lg bg-gray-50 text-sm outline-none border border-gray-200"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1">预设名称</label>
+                    <input
+                      value={newScoreForm.label}
+                      onChange={e=>setNewScoreForm({...newScoreForm, label: e.target.value})}
+                      placeholder="如：作业完成"
+                      className="w-full p-2 rounded-lg bg-gray-50 text-sm outline-none border border-gray-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1">积分值</label>
+                    <input
+                      value={newScoreForm.value}
+                      onChange={e=>setNewScoreForm({...newScoreForm, value: e.target.value})}
+                      placeholder="如：10"
+                      type="number"
+                      className="w-full p-2 rounded-lg bg-gray-50 text-sm outline-none border border-gray-200"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={handleAddInlineScoreItem}
+                  disabled={!newScoreForm.label || !newScoreForm.value}
+                  className={`w-full p-2.5 rounded-xl text-white text-sm font-bold transition-all ${
+                    !newScoreForm.label || !newScoreForm.value
+                      ? 'bg-gray-300 cursor-not-allowed'
+                      : 'bg-green-500 hover:brightness-105'
+                  }`}
+                >
+                  添加预设
+                </button>
+              </div>
+            </div>
+
             {isEditCategoryOpen && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6">
                 <div className="bg-white w-full max-w-xs rounded-2xl p-5">
@@ -1334,31 +1592,6 @@ const ClassManage: React.FC<ClassManageProps> = ({
                 </div>
               </div>
             )}
-
-            <div className="fixed bottom-24 left-0 right-0 px-4 z-30">
-              <div className="bg-white rounded-2xl shadow-lg p-4 border border-gray-100">
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-600 mb-1">积分大类名称（可选）</label>
-                    <input value={newPresetCategory} onChange={e=>setNewPresetCategory(e.target.value)} placeholder="如：表现优异、积极参与..." className="w-full p-2 rounded-xl bg-gray-50 text-sm outline-none border border-gray-200" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-xs font-bold text-gray-600 mb-1">项目名称</label>
-                      <input value={newScoreForm.label} onChange={e=>setNewScoreForm({...newScoreForm, label: e.target.value})} placeholder="如：主动发言" className="w-full p-2 rounded-xl bg-gray-50 text-sm outline-none border border-gray-200" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-gray-600 mb-1">分值</label>
-                      <input value={newScoreForm.value} onChange={e=>setNewScoreForm({...newScoreForm, value: e.target.value})} placeholder="分值" type="number" className="w-full p-2 rounded-xl bg-gray-50 text-sm outline-none border border-gray-200" />
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button onClick={handleAddInlineScoreItem} className="flex-1 p-2 rounded-xl bg-primary text-white text-sm font-bold hover:brightness-105">新增预设</button>
-                  </div>
-                  <div className="text-[10px] text-gray-500 bg-gray-50 p-2 rounded-lg">新增到：<span className="font-bold text-primary">{newPresetCategory.trim() || categoryNames[selectedScoreCategory] || selectedScoreCategory}</span></div>
-                </div>
-              </div>
-            </div>
           </div>
         )}
 
@@ -1370,11 +1603,16 @@ const ClassManage: React.FC<ClassManageProps> = ({
                 <input value={newTaskForm.title} onChange={e=>setNewTaskForm({...newTaskForm, title: e.target.value})} placeholder="任务名称" className="col-span-2 p-2 rounded-xl bg-gray-50 text-sm outline-none border border-gray-200" />
                 <input value={newTaskForm.desc} onChange={e=>setNewTaskForm({...newTaskForm, desc: e.target.value})} placeholder="任务说明..." className="col-span-2 p-2 rounded-xl bg-gray-50 text-sm outline-none border border-gray-200" />
                 <div className="col-span-2 flex items-center gap-2">
-                  <select value={taskAssigneeSelectId} onChange={e=>setTaskAssigneeSelectId(e.target.value)} className="flex-1 p-2 rounded-xl bg-gray-50 text-sm outline-none border border-gray-200">
+                  <select value={taskAssigneeSelectId} onChange={e=>{
+                    const selectedId = e.target.value;
+                    setTaskAssigneeSelectId(selectedId);
+                    if (selectedId && !newTaskForm.assignees.includes(selectedId)) {
+                      setNewTaskForm({...newTaskForm, assignees: [...newTaskForm.assignees, selectedId]});
+                    }
+                  }} className="flex-1 p-2 rounded-xl bg-gray-50 text-sm outline-none border border-gray-200">
                     <option value="">选择学生执行人</option>
                     {visibleStudents.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
                   </select>
-                  <button onClick={handleAddTaskAssignee} className="px-3 py-2 rounded-xl bg-primary text-white text-[10px] font-bold">添加</button>
                 </div>
                 {newTaskForm.assignees.length > 0 && (
                   <div className="col-span-2 flex flex-wrap gap-2">
@@ -1435,11 +1673,16 @@ const ClassManage: React.FC<ClassManageProps> = ({
               <div className="grid grid-cols-2 gap-2">
                 <input value={newChallenge.title} onChange={e=>setNewChallenge({...newChallenge, title: e.target.value})} placeholder="标题" className="p-2 rounded-xl bg-gray-50 text-sm outline-none" />
                 <div className="flex items-center gap-2">
-                  <select value={challengeSelectId} onChange={e=>setChallengeSelectId(e.target.value)} className="flex-1 p-2 rounded-xl bg-gray-50 text-sm outline-none">
+                  <select value={challengeSelectId} onChange={e=>{
+                    const selectedId = e.target.value;
+                    if (selectedId && !(newChallenge.participantIds as string[]).includes(selectedId)) {
+                      setNewChallenge({...newChallenge, participantIds: [...(newChallenge.participantIds as string[]), selectedId]} as any);
+                      setChallengeSelectId(''); // 清空选择框
+                    }
+                  }} className="flex-1 p-2 rounded-xl bg-gray-50 text-sm outline-none">
                     <option value="">选择学生</option>
                     {visibleStudents.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
                   </select>
-                  <button onClick={handleAddChallengeParticipant} className="px-3 py-2 rounded-xl bg-primary text-white text-[10px]">添加</button>
                 </div>
                 <div className="col-span-2 flex flex-wrap gap-2">
                   {(newChallenge.participantIds as string[]).map(id=> (
@@ -1473,11 +1716,21 @@ const ClassManage: React.FC<ClassManageProps> = ({
               <div className="space-y-2">
                 {challengeHistoryTab === 'current' ? (
                   challenges.filter(c => c.status === 'active').map(c => (
-                    <div key={c.id} className="flex items-center justify-between bg-gray-50 p-2 rounded-xl">
+                    <div
+                      key={c.id}
+                      className="flex items-center justify-between bg-gray-50 p-2 rounded-xl"
+                      onTouchStart={() => handleChallengePressStart(c.id)}
+                      onTouchEnd={handleChallengePressEnd}
+                      onMouseDown={() => handleChallengePressStart(c.id)}
+                      onMouseUp={handleChallengePressEnd}
+                      onMouseLeave={handleChallengePressEnd}
+                    >
                       <div>
                         <div className="text-xs font-bold text-gray-800">{c.title}</div>
                         <div className="text-[10px] text-gray-400">{c.desc}</div>
-                        <div className="text-[10px] text-gray-500 mt-1">{students.find(s=>s.id===c.participants[0])?.name || '未指定'}</div>
+                        <div className="text-[10px] text-gray-500 mt-1">
+                          挑战人: {c.challengerName || (c.challengerId && students.find(s=>s.id===c.challengerId)?.name) || '未指定'}
+                        </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <button onClick={()=>onChallengeStatus(c.id,'success')} className="px-2 py-1 rounded-lg bg-primary text-white text-[10px]">成功</button>
@@ -1487,17 +1740,25 @@ const ClassManage: React.FC<ClassManageProps> = ({
                   ))
                 ) : (
                   challenges.filter(c => c.status !== 'active').map(c => (
-                    <div key={c.id} className="flex items-center justify-between bg-gray-50 p-2 rounded-xl opacity-75">
+                    <div
+                      key={c.id}
+                      className="flex items-center justify-between bg-gray-50 p-2 rounded-xl opacity-75"
+                      onTouchStart={() => handleChallengePressStart(c.id)}
+                      onTouchEnd={handleChallengePressEnd}
+                      onMouseDown={() => handleChallengePressStart(c.id)}
+                      onMouseUp={handleChallengePressEnd}
+                      onMouseLeave={handleChallengePressEnd}
+                    >
                       <div>
                         <div className="text-xs font-bold text-gray-800">{c.title}</div>
                         <div className="text-[10px] text-gray-400">{c.desc}</div>
                         <div className="text-[10px] text-gray-500 mt-1 flex gap-2">
-                          <span>{students.find(s=>s.id===c.participants[0])?.name || '未指定'}</span>
+                          <span>挑战人: {c.challengerName || (c.challengerId && students.find(s=>s.id===c.challengerId)?.name) || '未指定'}</span>
                           {c.date && <span>{new Date(c.date).toLocaleDateString()}</span>}
                         </div>
                       </div>
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${c.result === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                        {c.result === 'success' ? '已完成' : '未完成'}
+                        {c.result === 'success' ? '成功' : '失败'}
                       </span>
                     </div>
                   ))
@@ -1525,7 +1786,7 @@ const ClassManage: React.FC<ClassManageProps> = ({
               </div>
             </div>
             <div className="bg-white rounded-3xl p-4 shadow-sm">
-              <h3 className="text-sm font-bold text-gray-800 mb-3">PK 列表</h3>
+              <h3 className="text-sm font-bold text-gray-800 mb-3">进行中的 PK</h3>
               <div className="space-y-2">
                 {pkMatches.filter(pk=>pk.status==='pending').map(pk => {
                   const nameA = students.find(s=>s.id===pk.studentA)?.name || pk.studentA;
@@ -1537,41 +1798,71 @@ const ClassManage: React.FC<ClassManageProps> = ({
                         <button onClick={()=>handlePKWinnerWithReward(pk.id, pk.studentA, pk.studentB)} className="col-span-1 px-3 py-2 rounded-xl bg-primary/10 text-primary text-xs font-bold whitespace-nowrap hover:bg-primary/20">
                           {nameA}
                         </button>
-                        <div className="col-span-3 text-center px-2">
+                        <button onClick={()=>handlePKDraw(pk.id)} className="col-span-3 px-2 py-2 rounded-xl bg-gray-200 hover:bg-gray-300 transition-colors cursor-pointer" title="点击表示平局">
                           <div className="text-sm font-bold text-gray-800 whitespace-normal break-words leading-5">{pk.topic}</div>
-                        </div>
+                        </button>
                         <button onClick={()=>handlePKWinnerWithReward(pk.id, pk.studentB, pk.studentA)} className="col-span-1 px-3 py-2 rounded-xl bg-primary/10 text-primary text-xs font-bold whitespace-nowrap hover:bg-primary/20">
                           {nameB}
                         </button>
                       </div>
-                      <div className="grid grid-cols-3 gap-2">
-                        <button onClick={()=>handlePKDraw(pk.id)} className="px-2 py-1 rounded-lg bg-yellow-100 text-yellow-700 text-xs font-bold whitespace-nowrap border border-yellow-200">平</button>
-                        <div className="col-span-2 flex gap-2">
-                          <input
-                            type="number"
-                            placeholder="奖励积分"
-                            value={pkRewardForm[pk.id]?.points || ''}
-                            onChange={(e)=>setPkRewardForm(prev => ({
-                              ...prev,
-                              [pk.id]: { ...( prev[pk.id] || { points: '', exp: '' }), points: e.target.value }
-                            }))}
-                            className="flex-1 px-2 py-1 rounded-lg bg-white text-xs outline-none border border-gray-200"
-                          />
-                          <input
-                            type="number"
-                            placeholder="奖励经验"
-                            value={pkRewardForm[pk.id]?.exp || ''}
-                            onChange={(e)=>setPkRewardForm(prev => ({
-                              ...prev,
-                              [pk.id]: { ...(prev[pk.id] || { points: '', exp: '' }), exp: e.target.value }
-                            }))}
-                            className="flex-1 px-2 py-1 rounded-lg bg-white text-xs outline-none border border-gray-200"
-                          />
-                        </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="number"
+                          placeholder="奖励积分"
+                          value={pkRewardForm[pk.id]?.points || ''}
+                          onChange={(e)=>setPkRewardForm(prev => ({
+                            ...prev,
+                            [pk.id]: { ...( prev[pk.id] || { points: '', exp: '' }), points: e.target.value }
+                          }))}
+                          className="flex-1 px-2 py-1 rounded-lg bg-white text-xs outline-none border border-gray-200"
+                        />
+                        <input
+                          type="number"
+                          placeholder="奖励经验"
+                          value={pkRewardForm[pk.id]?.exp || ''}
+                          onChange={(e)=>setPkRewardForm(prev => ({
+                            ...prev,
+                            [pk.id]: { ...(prev[pk.id] || { points: '', exp: '' }), exp: e.target.value }
+                          }))}
+                          className="flex-1 px-2 py-1 rounded-lg bg-white text-xs outline-none border border-gray-200"
+                        />
                       </div>
                     </div>
                   );
                 })}
+              </div>
+            </div>
+            <div className="bg-white rounded-3xl p-4 shadow-sm">
+              <h3 className="text-sm font-bold text-gray-800 mb-3">过往 PK 记录</h3>
+              <div className="space-y-2">
+                {pkMatches.filter(pk=>pk.status==='finished').length > 0 ? (
+                  pkMatches.filter(pk=>pk.status==='finished').map(pk => {
+                    const nameA = students.find(s=>s.id===pk.studentA)?.name || pk.studentA;
+                    const nameB = students.find(s=>s.id===pk.studentB)?.name || pk.studentB;
+                    const isDrawResult = pk.result === 'draw' || (!pk.winnerId && pk.status === 'finished');
+                    const winnerName = pk.winnerId ? (students.find(s=>s.id===pk.winnerId)?.name || pk.winnerId) : null;
+
+                    return (
+                      <div key={pk.id} className="bg-gray-50 rounded-xl p-3 opacity-75">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs font-bold ${pk.winnerId === pk.studentA ? 'text-yellow-600' : 'text-gray-600'}`}>{nameA}</span>
+                            <span className="text-xs text-gray-400">vs</span>
+                            <span className={`text-xs font-bold ${pk.winnerId === pk.studentB ? 'text-yellow-600' : 'text-gray-600'}`}>{nameB}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-gray-500">{pk.topic}</span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${isDrawResult ? 'bg-gray-200 text-gray-600' : 'bg-yellow-100 text-yellow-700'}`}>
+                              {isDrawResult ? '平局' : `${winnerName} 胜`}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="text-center text-xs text-gray-400 py-3 bg-gray-50 rounded-xl border border-dashed">暂无过往记录</div>
+                )}
               </div>
             </div>
           </div>
@@ -1595,11 +1886,16 @@ const ClassManage: React.FC<ClassManageProps> = ({
                   {badges.map(b=> (<option key={b.id} value={b.id}>{b.icon} {b.name}</option>))}
                 </select>
                 <div className="col-span-2 flex items-center gap-2">
-                  <select value={badgeAssigneeSelectId} onChange={e=>setBadgeAssigneeSelectId(e.target.value)} className="flex-1 p-2 rounded-xl bg-gray-50 text-sm outline-none">
+                  <select value={badgeAssigneeSelectId} onChange={e=>{
+                    const selectedId = e.target.value;
+                    setBadgeAssigneeSelectId(selectedId);
+                    if (selectedId && !(grantBadgeForm.studentIds as string[]).includes(selectedId)) {
+                      setGrantBadgeForm({...grantBadgeForm, studentIds: [...(grantBadgeForm.studentIds as string[]), selectedId]});
+                    }
+                  }} className="flex-1 p-2 rounded-xl bg-gray-50 text-sm outline-none">
                     <option value="">选择学生</option>
                     {visibleStudents.map(s=> (<option key={s.id} value={s.id}>{s.name}</option>))}
                   </select>
-                  <button onClick={handleAddBadgeAssignee} className="px-3 py-2 rounded-xl bg-primary text-white text-[10px]">添加</button>
                 </div>
                 <div className="col-span-3 flex flex-wrap gap-2">
                   {(grantBadgeForm.studentIds as string[]).map(id => (
@@ -1658,6 +1954,41 @@ const ClassManage: React.FC<ClassManageProps> = ({
           onSave={handleSaveStudentName}
           onCancel={() => setEditingStudent(null)}
         />
+      )}
+
+      {/* Challenge Delete Confirmation */}
+      {challengeToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 animate-in zoom-in-95">
+            <h3 className="font-bold text-lg text-gray-800 mb-3 text-center">确认删除</h3>
+            <p className="text-sm text-gray-600 mb-6 text-center">
+              确定要删除这个挑战吗？此操作无法撤销。
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setChallengeToDelete(null)}
+                className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-bold text-sm"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => handleDeleteChallenge(challengeToDelete)}
+                className="flex-1 py-2.5 rounded-xl bg-red-500 text-white font-bold text-sm"
+              >
+                删除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Badge Grant Success Toast */}
+      {badgeFeedback.show && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center pb-24 pointer-events-none animate-in slide-in-from-bottom-5">
+          <div className="bg-green-500 text-white px-6 py-4 rounded-2xl shadow-2xl font-bold text-center max-w-sm mx-4 animate-bounce pointer-events-auto">
+            {badgeFeedback.message}
+          </div>
+        </div>
       )}
     </div>
   );

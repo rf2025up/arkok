@@ -20,9 +20,29 @@ const { Pool } = require('pg');
 require('dotenv').config();
 
 // 初始化数据库连接
-const pool = new Pool({
-  connectionString: 'postgresql://postgres:4z2hdw8n@entr-postgresql.ns-ll4yxeb3.svc:5432/postgres'
-});
+const {
+  DATABASE_URL,
+  DB_HOST,
+  DB_PORT,
+  DB_USER,
+  DB_PASSWORD,
+  DB_NAME,
+} = process.env;
+
+const connectionString = DATABASE_URL ||
+  (DB_HOST && DB_PORT && DB_USER && DB_PASSWORD && DB_NAME
+    ? `postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}`
+    : undefined);
+
+const pool = connectionString
+  ? new Pool({ connectionString })
+  : new Pool({
+      host: DB_HOST,
+      port: parseInt(DB_PORT || '5432', 10),
+      user: DB_USER || 'postgres',
+      password: DB_PASSWORD,
+      database: DB_NAME || 'postgres',
+    });
 
 // 初始化应用
 const app = express();
@@ -39,20 +59,25 @@ app.use('/assets', express.static(path.join(__dirname, 'public/assets')));
 app.use('/index.css', express.static(path.join(__dirname, 'public/index.css')));
 app.use('/bigscreen', express.static(path.join(__dirname, 'public/bigscreen')));
 
+// 移动端主页面路由 - 直接使用 index.html
+app.get('/app', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public/index.html'));
+});
+
 // ============= 前端路由映射 =============
 
 /**
  * 大屏端 - 学生积分排行榜显示
- * 访问: https://xysrxgjnpycd.sealoshzh.site/display
+ * 访问: https://xysrxgjnpycd.sealoshzh.site/screen
  */
-app.get('/display', (req, res) => {
+app.get('/screen', (req, res) => {
   res.sendFile(path.join(__dirname, 'public/bigscreen/index.html'));
 });
 
 /**
  * 大屏端 hash 路由支持
  */
-app.get(/^\/display\//, (req, res) => {
+app.get(/^\/screen\//, (req, res) => {
   res.sendFile(path.join(__dirname, 'public/bigscreen/index.html'));
 });
 
@@ -68,6 +93,14 @@ app.get('/admin', (req, res) => {
  * 教师端 hash 路由支持
  */
 app.get(/^\/admin\//, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public/index.html'));
+});
+
+// 新增: /app 路径映射到教师端
+app.get('/app', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public/index.html'));
+});
+app.get(/^\/app\//, (req, res) => {
   res.sendFile(path.join(__dirname, 'public/index.html'));
 });
 
@@ -88,7 +121,7 @@ app.get(/^\/student\//, (req, res) => {
 
 // 根路由重定向到 admin
 app.get('/', (req, res) => {
-  res.redirect('/admin');
+  res.redirect('/app');
 });
 
 // ============= API 路由 =============
@@ -117,7 +150,14 @@ app.get('/api/students', async (req, res) => {
         s.level,
         s.class_name,
         s.avatar_url,
-        json_object_agg(h.id::text, COALESCE(hc_count.count, 0)) as habit_stats
+        json_object_agg(h.id::text, COALESCE(hc_count.count, 0)) as habit_stats,
+        COALESCE(
+          (SELECT json_agg(json_build_object('id', b.id, 'name', b.name, 'icon', b.icon, 'awarded_at', sb.awarded_at))
+           FROM student_badges sb
+           JOIN badges b ON sb.badge_id = b.id
+           WHERE sb.student_id = s.id),
+          '[]'::json
+        ) as badges
       FROM students s
       LEFT JOIN habits h ON true
       LEFT JOIN (
@@ -448,18 +488,70 @@ app.delete('/api/students/:id', async (req, res) => {
  */
 app.post('/api/challenges', async (req, res) => {
   try {
-    const { title, description, status = 'active', reward_points = 0, reward_exp = 0 } = req.body;
+    const { title, description, status = 'active', reward_points = 0, reward_exp = 0, challenger_id, participant_ids = [] } = req.body;
 
     const result = await pool.query(
-      `INSERT INTO challenges (title, description, status, reward_points, reward_exp)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, title, description, status, reward_points, reward_exp`,
-      [title, description || '', status, reward_points, reward_exp]
+      `INSERT INTO challenges (title, description, status, reward_points, reward_exp, challenger_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, title, description, status, reward_points, reward_exp, challenger_id`,
+      [title, description || '', status, reward_points, reward_exp, challenger_id || null]
     );
+
+    const challengeId = result.rows[0].id;
+
+    // 插入参与者到 challenge_participants 表
+    if (participant_ids && participant_ids.length > 0) {
+      for (const studentId of participant_ids) {
+        await pool.query(
+          `INSERT INTO challenge_participants (challenge_id, student_id)
+           VALUES ($1, $2)
+           ON CONFLICT DO NOTHING`,
+          [challengeId, studentId]
+        );
+      }
+    }
+
+    // 获取完整的挑战信息（包括挑战者和参与者）
+    const fullChallengeResult = await pool.query(`
+      SELECT
+        c.id,
+        c.title,
+        c.description,
+        c.status,
+        c.reward_points,
+        c.reward_exp,
+        c.challenger_id,
+        s.name as challenger_name,
+        s.avatar_url as challenger_avatar,
+        COALESCE(
+          json_agg(
+            json_build_object('student_id', cp.student_id)
+          ) FILTER (WHERE cp.student_id IS NOT NULL),
+          '[]'
+        ) as participants
+      FROM challenges c
+      LEFT JOIN students s ON c.challenger_id = s.id
+      LEFT JOIN challenge_participants cp ON c.id = cp.challenge_id
+      WHERE c.id = $1
+      GROUP BY c.id, s.name, s.avatar_url
+    `, [challengeId]);
+
+    const challengeData = fullChallengeResult.rows[0];
+
+    // 广播新挑战到所有WebSocket客户端
+    wss.clients.forEach((client) => {
+      if (client.readyState === 1) { // WebSocket.OPEN
+        client.send(JSON.stringify({
+          type: 'challenge:created',
+          payload: challengeData,
+          timestamp: new Date().toISOString()
+        }));
+      }
+    });
 
     res.status(201).json({
       success: true,
-      data: result.rows[0],
+      data: challengeData,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -477,7 +569,29 @@ app.post('/api/challenges', async (req, res) => {
  */
 app.get('/api/challenges', async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, title, description, status, reward_points, reward_exp FROM challenges');
+    const result = await pool.query(`
+      SELECT
+        c.id,
+        c.title,
+        c.description,
+        c.status,
+        c.reward_points,
+        c.reward_exp,
+        c.challenger_id,
+        s.name as challenger_name,
+        s.avatar_url as challenger_avatar,
+        COALESCE(
+          json_agg(
+            json_build_object('student_id', cp.student_id)
+          ) FILTER (WHERE cp.student_id IS NOT NULL),
+          '[]'
+        ) as participants
+      FROM challenges c
+      LEFT JOIN students s ON c.challenger_id = s.id
+      LEFT JOIN challenge_participants cp ON c.id = cp.challenge_id
+      GROUP BY c.id, s.name, s.avatar_url
+      ORDER BY c.created_at DESC
+    `);
     res.json({
       success: true,
       data: result.rows,
@@ -521,6 +635,41 @@ app.put('/api/challenges/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('Error updating challenge:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * 删除挑战
+ */
+app.delete('/api/challenges/:id', async (req, res) => {
+  try {
+    const challengeId = parseInt(req.params.id);
+
+    const deleteResult = await pool.query(
+      'DELETE FROM challenges WHERE id = $1 RETURNING id',
+      [challengeId]
+    );
+
+    if (deleteResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Challenge not found',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Challenge deleted successfully',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error deleting challenge:', error);
     res.status(500).json({
       success: false,
       error: error.message,
@@ -668,7 +817,28 @@ app.post('/api/tasks', async (req, res) => {
  */
 app.get('/api/tasks', async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, title, description, exp_value FROM tasks');
+    const result = await pool.query(`
+      SELECT
+        t.id,
+        t.title,
+        t.description,
+        t.exp_value,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'student_id', ta.student_id,
+              'student_name', s.name,
+              'student_avatar', s.avatar_url
+            )
+          ) FILTER (WHERE ta.student_id IS NOT NULL),
+          '[]'
+        ) as assigned_to
+      FROM tasks t
+      LEFT JOIN task_assignments ta ON t.id = ta.task_id
+      LEFT JOIN students s ON ta.student_id = s.id
+      GROUP BY t.id
+      ORDER BY t.id DESC
+    `);
     res.json({
       success: true,
       data: result.rows,
@@ -833,8 +1003,8 @@ app.get('/api/habits', async (req, res) => {
 app.post('/api/habits/:habit_id/checkin', async (req, res) => {
   try {
     const habitId = parseInt(req.params.habit_id);
-    const { student_id } = req.body;
-    const studentId = parseInt(student_id);
+    const { student_id, studentId: studentIdCamel } = req.body;
+    const studentId = parseInt(student_id ?? studentIdCamel);
 
     if (isNaN(studentId) || isNaN(habitId)) {
       return res.status(400).json({
@@ -863,6 +1033,78 @@ app.post('/api/habits/:habit_id/checkin', async (req, res) => {
       error: error.message,
       timestamp: new Date().toISOString()
     });
+  }
+});
+
+// 兼容: 获取积分历史
+app.get('/api/scores/history/:student_id', async (req, res) => {
+  try {
+    const studentId = parseInt(req.params.student_id);
+    const result = await pool.query(
+      'SELECT id, student_id, points_delta, exp_delta, reason, category, created_by, created_at FROM score_history WHERE student_id = $1 ORDER BY created_at DESC',
+      [studentId]
+    );
+    res.json({ success: true, data: result.rows, timestamp: new Date().toISOString() });
+  } catch (error) {
+    console.error('Error fetching score history:', error);
+    res.status(500).json({ success: false, error: error.message, timestamp: new Date().toISOString() });
+  }
+});
+
+// 兼容: 挑战完成路由 (/complete)
+app.put('/api/challenges/:id/complete', async (req, res) => {
+  try {
+    const challengeId = parseInt(req.params.id);
+    const { result } = req.body;
+    const updateResult = await pool.query(
+      'UPDATE challenges SET status = $1, result = $2 WHERE id = $3 RETURNING id, title, description, status, reward_points, reward_exp',
+      ['completed', result || 'success', challengeId]
+    );
+    if (updateResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Challenge not found', timestamp: new Date().toISOString() });
+    }
+    res.json({ success: true, data: updateResult.rows[0], timestamp: new Date().toISOString() });
+  } catch (error) {
+    console.error('Error completing challenge:', error);
+    res.status(500).json({ success: false, error: error.message, timestamp: new Date().toISOString() });
+  }
+});
+
+// 兼容: PK 结果提交路由 (/result)
+app.put('/api/pk-matches/:id/result', async (req, res) => {
+  try {
+    const pkId = parseInt(req.params.id);
+    const { winnerId, winner_id, status } = req.body;
+    const winner = winner_id ?? winnerId ?? null;
+    const updateResult = await pool.query(
+      'UPDATE pk_matches SET status = $1, winner_id = $2 WHERE id = $3 RETURNING id, student_a_id as student_a, student_b_id as student_b, topic, status, winner_id',
+      [status || 'finished', winner, pkId]
+    );
+    if (updateResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'PK match not found', timestamp: new Date().toISOString() });
+    }
+    res.json({ success: true, data: updateResult.rows[0], timestamp: new Date().toISOString() });
+  } catch (error) {
+    console.error('Error updating PK result:', error);
+    res.status(500).json({ success: false, error: error.message, timestamp: new Date().toISOString() });
+  }
+});
+
+// 兼容: 任务完成路由 (/complete)
+app.post('/api/tasks/:id/complete', async (req, res) => {
+  try {
+    const taskId = parseInt(req.params.id);
+    const updateResult = await pool.query(
+      'UPDATE tasks SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING id, title, description, exp_value, status',
+      ['completed', taskId]
+    );
+    if (updateResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Task not found', timestamp: new Date().toISOString() });
+    }
+    res.json({ success: true, data: updateResult.rows[0], timestamp: new Date().toISOString() });
+  } catch (error) {
+    console.error('Error completing task:', error);
+    res.status(500).json({ success: false, error: error.message, timestamp: new Date().toISOString() });
   }
 });
 
@@ -907,7 +1149,6 @@ wss.on('connection', (ws) => {
   // 连接关闭
   ws.on('close', () => {
     console.log('WebSocket client disconnected');
-    clearInterval(interval);
   });
 
   // 错误处理
@@ -953,7 +1194,7 @@ server.listen(PORT, HOST, () => {
 
 🔗 Frontend Endpoints:
    📱 Admin (手机端):   http://localhost:${PORT}/admin
-   📺 Display (大屏端): http://localhost:${PORT}/display
+   📺 Screen (大屏端): http://localhost:${PORT}/screen
    👤 Student (学生端): http://localhost:${PORT}/student
 
 🔌 API Endpoints:

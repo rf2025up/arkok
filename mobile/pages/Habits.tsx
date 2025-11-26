@@ -149,13 +149,13 @@ const Habits: React.FC<HabitsProps> = ({ habits, students, onCheckIn, onUpdateHa
         </div>
       </div>
 
-      <div className="fixed bottom-24 left-0 right-0 px-8 z-30">
-          <button 
+      <div className="fixed bottom-20 left-0 right-0 px-6 z-30 flex justify-center">
+          <button
             onClick={handleConfirm}
             disabled={selectedStudentIds.size === 0}
-            className={`w-full py-3.5 rounded-xl font-bold text-white shadow-xl transition-all flex items-center justify-center ${
-                selectedStudentIds.size > 0 
-                ? 'bg-gray-900 hover:bg-gray-800 active:scale-95' 
+            className={`px-6 py-2.5 rounded-xl font-bold text-white shadow-lg transition-all flex items-center justify-center text-sm ${
+                selectedStudentIds.size > 0
+                ? 'bg-gray-900 hover:bg-gray-800 active:scale-95'
                 : 'bg-gray-300 cursor-not-allowed'
             }`}
           >

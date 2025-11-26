@@ -82,7 +82,7 @@ const HonorBadgesCard: React.FC<HonorBadgesCardProps> = ({ students }) => {
                 to { transform: translateX(-50%); }
             }
             .animate-scroll {
-                animation: scroll 50s linear infinite;
+                animation: scroll 120s linear infinite;
             }
             .pause {
                 animation-play-state: paused;

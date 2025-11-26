@@ -1,8 +1,29 @@
 const { Pool } = require('pg');
+require('dotenv').config();
 
-const pool = new Pool({
-  connectionString: 'postgresql://postgres:4z2hdw8n@entr-postgresql.ns-ll4yxeb3.svc:5432/postgres'
-});
+const {
+  DATABASE_URL,
+  DB_HOST,
+  DB_PORT,
+  DB_USER,
+  DB_PASSWORD,
+  DB_NAME,
+} = process.env;
+
+const connectionString = DATABASE_URL ||
+  (DB_HOST && DB_PORT && DB_USER && DB_PASSWORD && DB_NAME
+    ? `postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}`
+    : undefined);
+
+const pool = connectionString
+  ? new Pool({ connectionString })
+  : new Pool({
+      host: DB_HOST || 'entr-postgresql.ns-ll4yxeb3.svc',
+      port: parseInt(DB_PORT || '5432', 10),
+      user: DB_USER || 'postgres',
+      password: DB_PASSWORD || '4z2hdw8n',
+      database: DB_NAME || 'postgres',
+    });
 
 // 28 students from mobile/App.tsx
 const students = [
@@ -12,7 +33,7 @@ const students = [
   '肖浩轩', '陈梓萌', '彭斯晟', '谭雨涵'
 ];
 
-const classes = ['三年一班', '三年二班', '三年三班'];
+const classes = ['黄老师班', '姜老师班', '龙老师班'];
 
 async function seedDatabase() {
   try {

@@ -8,7 +8,7 @@ import Habits from './pages/Habits';
 import Settings from './pages/Settings';
 
 import { POINT_PRESETS as INITIAL_PRESETS } from './constants';
-import { Student, Habit, PointPreset, ScoreCategory, Challenge, PKMatch, Badge, Task } from './types';
+import { Student, Habit, PointPreset, ScoreCategory, Challenge, PKMatch, Badge, Task, StudentTaskRecord, StudentChallengeRecord, StudentPKRecord } from './types';
 
 function App() {
   const cartoonAvatar = (seed: string) => {
@@ -118,7 +118,14 @@ function App() {
             exp: apiStudent.total_exp || 0,
             level: apiStudent.level || 1,
             className: apiStudent.class_name || '未分配',
-            habitStats: apiStudent.habit_stats || {}
+            habitStats: apiStudent.habit_stats || {},
+            badges: apiStudent.badges || [],
+            badgeHistory: (apiStudent.badges || []).map((b: any) => ({
+              id: `badge-${b.id}-${apiStudent.id}`,
+              badgeId: String(b.id),
+              name: b.name,
+              date: b.awarded_at || new Date().toISOString()
+            }))
           }));
           setStudents(arr);
 
@@ -173,16 +180,23 @@ function App() {
         if (challengesRes.ok) {
           const challengesData = await challengesRes.json();
           if (challengesData.success && Array.isArray(challengesData.data)) {
-            setChallenges(challengesData.data.map((c: any) => ({
-              id: String(c.id),
-              title: c.title,
-              desc: c.description,
-              status: c.status,
-              participants: [],
-              rewardPoints: c.reward_points || 0,
-              rewardExp: c.reward_exp || 0,
-              date: new Date().toISOString()
-            })));
+            setChallenges(challengesData.data.map((c: any) => {
+              // 从API返回的participants中提取student_id
+              const participantIds = (c.participants || []).map((p: any) => String(p.student_id));
+              return {
+                id: String(c.id),
+                title: c.title,
+                desc: c.description,
+                status: c.status,
+                participants: participantIds,
+                challengerId: c.challenger_id ? String(c.challenger_id) : undefined,
+                challengerName: c.challenger_name || undefined,
+                challengerAvatar: c.challenger_avatar || undefined,
+                rewardPoints: c.reward_points || 0,
+                rewardExp: c.reward_exp || 0,
+                date: new Date().toISOString()
+              };
+            }));
           }
         }
 
@@ -224,7 +238,7 @@ function App() {
               desc: t.description,
               expValue: t.exp_value || 0,
               createdAt: new Date().toISOString(),
-              assignedTo: []
+              assignedTo: (t.assigned_to || []).map((a: any) => String(a.student_id))
             })));
           }
         }
@@ -235,6 +249,75 @@ function App() {
 
     fetchInitialData();
   }, []);
+
+  // 根据 tasks, challenges, pkMatches 生成学生的历史记录
+  useEffect(() => {
+    setStudents(prevStudents => prevStudents.map(student => {
+      // 生成任务历史：合并当前任务和已完成任务
+      const currentTasks: StudentTaskRecord[] = tasks
+        .filter(t => t.assignedTo?.includes(student.id))
+        .map(t => ({
+          id: `task-${t.id}-${student.id}`,
+          taskId: t.id,
+          title: t.title,
+          exp: t.expValue || 0,
+          date: t.createdAt || new Date().toISOString()
+        }));
+
+      // 保留已完成的任务（不在当前tasks列表中的）
+      const existingTaskHistory = student.taskHistory || [];
+      const completedTasks = existingTaskHistory.filter(
+        th => !tasks.find(t => t.id === th.taskId)
+      );
+
+      // 合并当前任务和已完成任务，去重（使用 taskId 去重，确保每个任务只出现一次）
+      const taskHistoryMap = new Map<string, StudentTaskRecord>();
+      [...completedTasks, ...currentTasks].forEach(t => {
+        taskHistoryMap.set(t.taskId, t);
+      });
+      const taskHistory = Array.from(taskHistoryMap.values());
+
+      // 生成挑战历史：找到该学生参与的或发起的挑战
+      const challengeHistory: StudentChallengeRecord[] = challenges
+        .filter(c => c.participants.includes(student.id) || c.challengerId === student.id)
+        .filter(c => c.status === 'completed')
+        .map(c => ({
+          id: `challenge-${c.id}-${student.id}`,
+          title: c.title,
+          result: c.result || 'success',
+          points: c.rewardPoints || 0,
+          exp: c.rewardExp || 0,
+          date: c.date || new Date().toISOString()
+        }));
+
+      // 生成PK历史：找到该学生参与的PK
+      const pkHistory: StudentPKRecord[] = pkMatches
+        .filter(pk => pk.studentA === student.id || pk.studentB === student.id)
+        .filter(pk => pk.status === 'finished')
+        .map(pk => {
+          const isStudentA = pk.studentA === student.id;
+          const opponentId = isStudentA ? pk.studentB : pk.studentA;
+          const opponentName = students.find(s => s.id === opponentId)?.name;
+          const isWinner = pk.winnerId === student.id;
+          return {
+            id: `pk-${pk.id}-${student.id}`,
+            pkId: pk.id,
+            topic: pk.topic,
+            opponentId: opponentId,
+            opponentName: opponentName,
+            result: isWinner ? 'win' : 'lose',
+            date: new Date().toISOString()
+          };
+        });
+
+      return {
+        ...student,
+        taskHistory,
+        challengeHistory,
+        pkHistory
+      };
+    }));
+  }, [tasks, challenges, pkMatches]);
 
   const handleUpdateScore = async (ids: string[], points: number, reason: string, exp?: number) => {
     try {
@@ -282,7 +365,14 @@ function App() {
               exp: apiStudent.total_exp || 0,
               level: apiStudent.level || 1,
               className: apiStudent.class_name || '未分配',
-              habitStats: apiStudent.habit_stats || currentHabitStats.get(String(apiStudent.id)) || {}
+              habitStats: apiStudent.habit_stats || currentHabitStats.get(String(apiStudent.id)) || {},
+              badges: apiStudent.badges || [],
+              badgeHistory: (apiStudent.badges || []).map((b: any) => ({
+                id: `badge-${b.id}-${apiStudent.id}`,
+                badgeId: String(b.id),
+                name: b.name,
+                date: b.awarded_at || new Date().toISOString()
+              }))
             }));
             setStudents(arr);
             refreshSucceeded = true;
@@ -350,7 +440,14 @@ function App() {
                 exp: apiStudent.total_exp || 0,
                 level: apiStudent.level || 1,
                 className: apiStudent.class_name || '未分配',
-                habitStats: apiStudent.habit_stats || {}
+                habitStats: apiStudent.habit_stats || {},
+                badges: apiStudent.badges || [],
+                badgeHistory: (apiStudent.badges || []).map((b: any) => ({
+                  id: `badge-${b.id}-${apiStudent.id}`,
+                  badgeId: String(b.id),
+                  name: b.name,
+                  date: b.awarded_at || new Date().toISOString()
+                }))
               }));
               setStudents(arr);
             }

@@ -25,7 +25,8 @@ export interface Student {
   level: number;
   className: string;
   teamId?: string;
-  habitStats?: Record<string, number>; 
+  habitStats?: Record<string, number>;
+  badges?: Array<{id: number; name: string; icon: string; awarded_at: string}>;
   challengeHistory?: StudentChallengeRecord[];
   pkHistory?: StudentPKRecord[];
   taskHistory?: StudentTaskRecord[];
@@ -45,6 +46,9 @@ export interface Challenge {
   status: 'active' | 'completed';
   result?: 'success' | 'fail';
   participants: string[];
+  challengerId?: string;
+  challengerName?: string;
+  challengerAvatar?: string;
   rewardPoints: number;
   rewardExp?: number;
   date?: string;

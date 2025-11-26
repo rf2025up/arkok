@@ -74,14 +74,27 @@ const App: React.FC = () => {
         const res = await fetch(`${API_BASE_URL}/challenges`)
         const data = await res.json()
         if (data.success && Array.isArray(data.data)) {
-          setRealChallenges(data.data.map((c: any) => ({
-            id: String(c.id),
-            title: c.title,
-            description: c.description,
-            status: c.status,
-            reward_points: c.reward_points,
-            reward_exp: c.reward_exp
-          })))
+          setRealChallenges(data.data.map((c: any) => {
+            // 状态映射：API返回英文，组件需要中文
+            const statusMap: Record<string, string> = {
+              'active': '进行中',
+              'completed': '成功',
+              'failed': '失败',
+              'pending': '进行中'
+            }
+            return {
+              id: String(c.id),
+              title: c.title,
+              description: c.description,
+              status: statusMap[c.status] || '进行中',
+              reward_points: c.reward_points,
+              reward_exp: c.reward_exp,
+              challenger: {
+                name: c.challenger_name || '未知挑战者',
+                avatar: c.challenger_avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=system'
+              }
+            }
+          }))
         }
       } catch (error) {
         console.error('Failed to load challenge data:', error)

@@ -52,7 +52,11 @@ const PKBoardCard: React.FC<PKBoardCardProps> = ({ pks, teamsMap, students = [] 
 
   useEffect(() => {
     if (pages.length <= 1) return
-    const t = setInterval(() => setPage(p => (p + 1) % pages.length), 5000)
+    const t = setInterval(() => setPage(p => {
+      // 到达最后一页后停止，不再循环
+      if (p >= pages.length - 1) return p
+      return p + 1
+    }), 3000) // 每页固定3秒
     return () => clearInterval(t)
   }, [pages.length])
 
@@ -72,6 +76,7 @@ const PKBoardCard: React.FC<PKBoardCardProps> = ({ pks, teamsMap, students = [] 
                   const aTeam = teamsMap.get(item.student_a)
                   const bTeam = teamsMap.get(item.student_b)
                   const isFinished = item.status === 'finished'
+                  const isDraw = isFinished && !item.winner_id
                   const isAWin = isFinished && item.winner_id === item.student_a
                   const isBWin = isFinished && item.winner_id === item.student_b
                   const nameA = studentA?.name || `学生${item.student_a}`
@@ -84,24 +89,32 @@ const PKBoardCard: React.FC<PKBoardCardProps> = ({ pks, teamsMap, students = [] 
                       <div className="grid grid-cols-3 items-center">
                         <div className="flex items-center gap-2">
                           <img src={avatarA} className="w-8 h-8 rounded-full border border-slate-600" />
-                          <span className={`text-sm font-semibold ${isFinished ? (isAWin ? 'text-emerald-400' : 'text-red-400') : 'text-white'}`}>{shortName(nameA)}</span>
-                          {isFinished && (isAWin ? (
-                            <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-emerald-500/80 text-white rounded">WIN</span>
-                          ) : (
-                            <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-red-500/70 text-white rounded">LOSE</span>
-                          ))}
+                          <span className={`text-sm font-semibold ${isAWin ? 'text-emerald-400' : isBWin ? 'text-red-400' : 'text-white'}`}>{shortName(nameA)}</span>
+                          {isAWin && (
+                            <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-emerald-500/80 text-white rounded">胜</span>
+                          )}
+                          {isBWin && (
+                            <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-red-500/70 text-white rounded">负</span>
+                          )}
                         </div>
                         <div className="flex items-center justify-center flex-col">
-                          <span className="text-xs text-slate-500">VS</span>
+                          {isDraw ? (
+                            <span className="text-xs font-bold text-yellow-400">平局</span>
+                          ) : !isFinished ? (
+                            <span className="text-xs font-bold text-blue-400">PK中</span>
+                          ) : (
+                            <span className="text-xs text-slate-500">VS</span>
+                          )}
                           <span className="mt-1 text-[11px] text-slate-400 truncate max-w-[140px]">{item.topic}</span>
                         </div>
                         <div className="flex items-center gap-2 justify-end">
-                          <span className={`text-sm font-semibold ${isFinished ? (isBWin ? 'text-emerald-400' : 'text-red-400') : 'text-white'}`}>{shortName(nameB)}</span>
-                          {isFinished && (isBWin ? (
-                            <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-emerald-500/80 text-white rounded">WIN</span>
-                          ) : (
-                            <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-red-500/70 text-white rounded">LOSE</span>
-                          ))}
+                          {isBWin && (
+                            <span className="mr-1 px-1.5 py-0.5 text-[10px] font-bold bg-emerald-500/80 text-white rounded">胜</span>
+                          )}
+                          {isAWin && (
+                            <span className="mr-1 px-1.5 py-0.5 text-[10px] font-bold bg-red-500/70 text-white rounded">负</span>
+                          )}
+                          <span className={`text-sm font-semibold ${isBWin ? 'text-emerald-400' : isAWin ? 'text-red-400' : 'text-white'}`}>{shortName(nameB)}</span>
                           <img src={avatarB} className="w-8 h-8 rounded-full border border-slate-600" />
                         </div>
                       </div>

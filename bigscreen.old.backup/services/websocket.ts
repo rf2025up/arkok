@@ -42,7 +42,10 @@ export function connectWebSocket(wsUrl?: string): Promise<void> {
       return;
     }
 
-    const url = wsUrl || `ws://${window.location.hostname}:3000`;
+    // 使用当前页面的协议和主机，自动适配 http/https 和端口
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host; // 包含端口号
+    const url = wsUrl || `${protocol}//${host}`;
 
     try {
       console.log(`🔗 连接 WebSocket: ${url}`);

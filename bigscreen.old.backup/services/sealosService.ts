@@ -62,7 +62,17 @@ export const getChallenges = async (): Promise<Challenge[]> => {
     const response = await fetch(`${API_BASE_URL}/challenges`)
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const result = await response.json()
-    cachedData.challenges = result.data || []
+    // 映射挑战数据，使用 API 返回的 challenger 信息
+    cachedData.challenges = (result.data || []).map((c: any) => ({
+      id: String(c.id),
+      title: c.title || '未命名挑战',
+      description: c.description || '',
+      status: c.status || 'active',
+      challenger: {
+        name: c.challenger_name || '未知挑战者',
+        avatar: c.challenger_avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=system'
+      }
+    }))
     return cachedData.challenges
   } catch (error) {
     console.error('Failed to get challenges:', error)
