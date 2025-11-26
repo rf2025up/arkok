@@ -1,10 +1,513 @@
-# 星途成长方舟·大屏系统 - 技术文档
+# 星途成长方舟·Growark - 完整技术架构文档
 
-## 项目概述
+> **文档目的：** 提供系统完整的技术架构、数据流向、API接口、前后端对应关系，确保每次需求修改都有清晰的上下文和系统性指导。
+
+## 目录
+
+1. [系统架构总览](#系统架构总览)
+2. [技术栈](#技术栈)
+3. [数据库设计](#数据库设计)
+4. [API接口文档](#api接口文档)
+5. [前端架构](#前端架构)
+6. [数据流向](#数据流向)
+7. [实时通信机制](#实时通信机制)
+8. [部署架构](#部署架构)
+9. [历史问题与解决方案](#历史问题与解决方案)
+
+---
+
+## 系统架构总览
+
+### 项目简介
+
+星途成长方舟（Growark）是一个课堂管理系统，包含三个主要应用端：
+- **教师端/管理端（Admin）**：手机端应用，用于班级管理、学生管理、任务发布、挑战创建等
+- **大屏显示端（Screen）**：大屏展示应用，实时显示学生排行榜、PK对战、挑战擂台、荣誉勋章等
+- **学生端（Student）**：学生查看个人信息和任务（预留）
+
+### 整体架构图
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                          Growark 系统架构                              │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────┐         ┌──────────────────┐         ┌──────────────────┐
+│   教师端/管理端    │         │   后端 API 服务   │         │   PostgreSQL     │
+│   (Admin)        │◄───────►│   (Node/Express) │◄───────►│   数据库          │
+│   移动端应用      │  REST   │   + WebSocket    │  SQL    │                  │
+└──────────────────┘   API   └──────────────────┘         └──────────────────┘
+                                      ▲                            │
+                                      │                            │
+                                      │ HTTP Polling (2s)          │
+                                      │ + WebSocket                │
+                                      │                            │
+┌──────────────────┐                  │                            │
+│   大屏显示端      │                  │                            │
+│   (Screen)       │──────────────────┘                            │
+│   实时展示        │                                               │
+└──────────────────┘                                               │
+                                                                   │
+┌──────────────────┐                                               │
+│   学生端          │                                               │
+│   (Student)      │───────────────────────────────────────────────┘
+│   个人信息查看    │              REST API
+└──────────────────┘
+```
+
+### 核心功能模块
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                          功能模块架构                                  │
+└─────────────────────────────────────────────────────────────────────┘
+
+教师端（Admin）                    后端服务                    数据库表
+├─ 班级管理                       ├─ 学生管理 API              ├─ students
+│  ├─ 学生列表                    │  ├─ GET /api/students     │  ├─ id, name, score
+│  ├─ 学生详情                    │  ├─ POST /api/students    │  ├─ avatar_url
+│  ├─ 积分管理                    │  ├─ PUT /api/students/:id │  ├─ total_exp, level
+│  └─ 勋章授予                    │  └─ DELETE /api/students  │  └─ team_id, class_name
+│                                 │                            │
+├─ 任务管理                       ├─ 任务管理 API              ├─ tasks
+│  ├─ 任务发布                    │  ├─ GET /api/tasks        │  ├─ id, title
+│  ├─ 任务分配                    │  ├─ POST /api/tasks       │  ├─ description
+│  └─ 任务完成                    │  └─ DELETE /api/tasks/:id │  └─ exp_value
+│                                 │                            │
+│                                 │                            ├─ task_assignments
+│                                 │                            │  ├─ task_id
+│                                 │                            │  └─ student_id
+│                                 │                            │
+├─ 挑战管理                       ├─ 挑战管理 API              ├─ challenges
+│  ├─ 挑战发布                    │  ├─ GET /api/challenges   │  ├─ id, title
+│  ├─ 挑战人选择                  │  ├─ POST /api/challenges  │  ├─ challenger_id
+│  └─ 挑战结果                    │  └─ PUT /api/challenges   │  ├─ reward_points
+│                                 │                            │  └─ status, result
+│                                 │                            │
+│                                 │                            ├─ challenge_participants
+│                                 │                            │  ├─ challenge_id
+│                                 │                            │  └─ student_id
+│                                 │                            │
+├─ PK管理                         ├─ PK管理 API                ├─ pk_matches
+│  ├─ PK创建                      │  ├─ GET /api/pk-matches   │  ├─ id
+│  ├─ PK对战                      │  ├─ POST /api/pk-matches  │  ├─ student_a_id
+│  └─ PK结果                      │  └─ PUT /api/pk-matches   │  ├─ student_b_id
+│                                 │                            │  ├─ topic
+│                                 │                            │  ├─ status
+│                                 │                            │  └─ winner_id
+│                                 │                            │
+├─ 习惯打卡                       ├─ 习惯管理 API              ├─ habits
+│  ├─ 习惯创建                    │  ├─ GET /api/habits       │  ├─ id, name
+│  ├─ 打卡记录                    │  ├─ POST /api/habits      │  └─ icon, points
+│  └─ 打卡统计                    │  └─ POST /api/habit-check │
+│                                 │                            ├─ habit_checkins
+│                                 │                            │  ├─ habit_id
+│                                 │                            │  ├─ student_id
+│                                 │                            │  └─ checked_at
+│                                 │                            │
+└─ 勋章管理                       ├─ 勋章管理 API              ├─ badges
+   ├─ 勋章定义                    │  ├─ GET /api/badges       │  ├─ id, name
+   └─ 勋章授予                    │  └─ POST /api/award-badge │  ├─ icon
+                                  │                            │  └─ description
+                                  │                            │
+                                  │                            ├─ student_badges
+                                  │                            │  ├─ student_id
+                                  │                            │  ├─ badge_id
+                                  │                            │  └─ awarded_at
+                                  │                            │
+大屏端（Screen）                  ├─ WebSocket 事件            ├─ teams
+├─ 学生排行榜                     │  ├─ student:updated       │  ├─ id, name
+├─ PK对战榜                       │  ├─ challenge:created     │  ├─ color
+├─ 挑战擂台                       │  ├─ pk:created            │  └─ text_color
+├─ 荣誉勋章                       │  └─ badge:awarded         │
+└─ 实时更新                       │                            ├─ groups
+   (HTTP轮询 2s)                  │                            │  ├─ id, name
+                                  │                            │  └─ display_order
+                                  │                            │
+                                  │                            ├─ score_history
+                                  │                            │  ├─ student_id
+                                  │                            │  ├─ points_change
+                                  │                            │  └─ reason
+```
+
+---
+
+## 技术栈
+
+### 后端技术栈
+
+| 技术 | 版本 | 用途 |
+|------|------|------|
+| Node.js | 18+ | 运行时环境 |
+| Express | 5.1.0 | Web框架 |
+| PostgreSQL | 14+ | 关系型数据库 |
+| pg | 8.16.3 | PostgreSQL客户端 |
+| ws | 8.18.3 | WebSocket服务 |
+| dotenv | 17.2.3 | 环境变量管理 |
+| cors | 2.8.5 | 跨域资源共享 |
+| body-parser | 2.2.0 | 请求体解析 |
+
+### 前端技术栈
+
+| 技术 | 版本 | 用途 |
+|------|------|------|
+| React | 18+ | UI框架 |
+| TypeScript | 5+ | 类型系统 |
+| Vite | 5+ | 构建工具 |
+| Tailwind CSS | 3+ | CSS框架 |
+| React Router | 6+ | 路由管理 |
+
+### 部署环境
+
+| 组件 | 环境 | 说明 |
+|------|------|------|
+| 应用服务器 | Sealos/Devbox | 容器化部署 |
+| 数据库 | Neon PostgreSQL | 云数据库服务 |
+| 静态资源 | Express Static | 静态文件服务 |
+| 反向代理 | Sealos Gateway | 内网穿透和HTTPS |
+
+---
+
+## 数据库设计
+
+### ER 图概览
+
+```
+┌─────────────┐         ┌─────────────┐         ┌─────────────┐
+│   teams     │         │  students   │         │   groups    │
+│─────────────│         │─────────────│         │─────────────│
+│ id (PK)     │◄────────│ id (PK)     │────────►│ id (PK)     │
+│ name        │         │ name        │         │ name        │
+│ color       │         │ score       │         │ display_ord │
+│ text_color  │         │ avatar_url  │         │ color       │
+└─────────────┘         │ total_exp   │         └─────────────┘
+                        │ level       │
+                        │ team_id(FK) │
+                        │ group_id(FK)│
+                        │ class_name  │
+                        └─────────────┘
+                              │
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        │                     │                     │
+        ▼                     ▼                     ▼
+┌─────────────┐       ┌─────────────┐       ┌─────────────┐
+│student_badges│      │task_assign  │       │challenge_   │
+│─────────────│       │─────────────│       │participants │
+│ student_id  │       │ task_id(FK) │       │─────────────│
+│ badge_id(FK)│       │ student_id  │       │challenge_id │
+│ awarded_at  │       │ assigned_at │       │ student_id  │
+└─────────────┘       └─────────────┘       └─────────────┘
+        │                     │                     │
+        │                     │                     │
+        ▼                     ▼                     ▼
+┌─────────────┐       ┌─────────────┐       ┌─────────────┐
+│   badges    │       │    tasks    │       │ challenges  │
+│─────────────│       │─────────────│       │─────────────│
+│ id (PK)     │       │ id (PK)     │       │ id (PK)     │
+│ name        │       │ title       │       │ title       │
+│ icon        │       │ description │       │ description │
+│ description │       │ exp_value   │       │ challenger  │
+└─────────────┘       │ status      │       │ reward_pts  │
+                      └─────────────┘       │ reward_exp  │
+                                            │ status      │
+                                            │ result      │
+                                            └─────────────┘
+
+┌─────────────┐       ┌─────────────┐       ┌─────────────┐
+│ pk_matches  │       │   habits    │       │habit_checkin│
+│─────────────│       │─────────────│       │─────────────│
+│ id (PK)     │       │ id (PK)     │       │ habit_id(FK)│
+│ student_a_id│       │ name        │       │ student_id  │
+│ student_b_id│       │ icon        │       │ checked_at  │
+│ topic       │       │ points      │       └─────────────┘
+│ status      │       └─────────────┘
+│ winner_id   │
+└─────────────┘       ┌─────────────┐
+                      │score_history│
+                      │─────────────│
+                      │ student_id  │
+                      │ points_chg  │
+                      │ reason      │
+                      │ created_at  │
+                      └─────────────┘
+```
+
+### 核心数据表详解
+
+#### 1. students 表（学生信息）
+
+```sql
+CREATE TABLE students (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(100) NOT NULL UNIQUE,
+  score INTEGER DEFAULT 0,                    -- 当前积分
+  avatar_url VARCHAR(500),                    -- 头像URL
+  total_exp INTEGER DEFAULT 0,                -- 总经验值
+  level INTEGER DEFAULT 1,                    -- 等级
+  team_id INTEGER REFERENCES teams(id),       -- 所属队伍
+  group_id INTEGER REFERENCES groups(id),     -- 所属小组
+  class_name VARCHAR(50),                     -- 班级名称
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**字段说明：**
+- `score`: 学生当前积分，用于排行榜排序
+- `total_exp`: 累计经验值，用于等级计算
+- `level`: 学生等级，根据经验值自动计算
+- `team_id`: 队伍ID，用于团队PK和排行
+- `group_id`: 小组ID，用于小组管理
+- `class_name`: 班级名称，支持多班级管理
+
+**API返回格式：**
+```json
+{
+  "id": 16,
+  "name": "吴逸桐",
+  "score": 150,
+  "avatar_url": "https://api.dicebear.com/7.x/avataaars/svg?seed=吴逸桐",
+  "total_exp": 500,
+  "level": 3,
+  "team_id": 1,
+  "class_name": "一年级1班",
+  "badges": [
+    {
+      "id": 1,
+      "name": "学霸之星",
+      "icon": "⭐",
+      "awarded_at": "2025-11-26T10:30:00Z"
+    }
+  ]
+}
+```
+
+#### 2. tasks 表（任务）
+
+```sql
+CREATE TABLE tasks (
+  id SERIAL PRIMARY KEY,
+  title VARCHAR(200) NOT NULL,
+  description TEXT,
+  exp_value INTEGER DEFAULT 0,                -- 经验值奖励
+  status VARCHAR(20) DEFAULT 'active',        -- active, completed, deleted
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**关联表：task_assignments（任务分配）**
+```sql
+CREATE TABLE task_assignments (
+  id SERIAL PRIMARY KEY,
+  task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(task_id, student_id)
+);
+```
+
+**数据流程：**
+1. 教师端创建任务 → `tasks` 表
+2. 选择执行人 → `task_assignments` 表
+3. GET /api/tasks 返回任务及执行人列表
+4. 学生个人信息页显示任务记录
+
+**API返回格式：**
+```json
+{
+  "id": 1,
+  "title": "完成数学作业",
+  "description": "第3章练习题",
+  "exp_value": 50,
+  "assigned_to": [
+    {
+      "student_id": 16,
+      "student_name": "吴逸桐",
+      "student_avatar": "https://..."
+    }
+  ]
+}
+```
+
+#### 3. challenges 表（挑战）
+
+```sql
+CREATE TABLE challenges (
+  id SERIAL PRIMARY KEY,
+  title VARCHAR(200) NOT NULL,
+  description TEXT,
+  status VARCHAR(20) DEFAULT 'active',        -- active, completed
+  result VARCHAR(20),                         -- success, fail
+  challenger_id INTEGER REFERENCES students(id),  -- 挑战者
+  reward_points INTEGER DEFAULT 0,
+  reward_exp INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**关联表：challenge_participants（挑战参与者）**
+```sql
+CREATE TABLE challenge_participants (
+  id SERIAL PRIMARY KEY,
+  challenge_id INTEGER NOT NULL REFERENCES challenges(id) ON DELETE CASCADE,
+  student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(challenge_id, student_id)
+);
+```
+
+**数据流程：**
+1. 教师端创建挑战 → `challenges` 表（包含 `challenger_id`）
+2. 选择参与者 → `challenge_participants` 表
+3. GET /api/challenges JOIN students 返回挑战者信息
+4. 大屏端显示挑战者名称和头像
+
+**API返回格式：**
+```json
+{
+  "id": 1,
+  "title": "背古诗挑战",
+  "description": "背诵《静夜思》",
+  "status": "active",
+  "result": null,
+  "challenger_id": 16,
+  "challenger_name": "吴逸桐",
+  "challenger_avatar": "https://...",
+  "reward_points": 20,
+  "reward_exp": 10,
+  "participants": [
+    {"student_id": 16},
+    {"student_id": 17}
+  ]
+}
+```
+
+#### 4. pk_matches 表（PK对战）
+
+```sql
+CREATE TABLE pk_matches (
+  id SERIAL PRIMARY KEY,
+  student_a_id INTEGER NOT NULL REFERENCES students(id),
+  student_b_id INTEGER NOT NULL REFERENCES students(id),
+  topic VARCHAR(200),                         -- PK主题
+  status VARCHAR(20) DEFAULT 'pending',       -- pending, finished
+  winner_id INTEGER REFERENCES students(id),  -- 获胜者
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**数据流程：**
+1. 教师端创建PK → `pk_matches` 表
+2. 大屏端按积分排序生成PK配对
+3. 教师端设置PK结果 → 更新 `winner_id`
+4. 学生个人信息页显示PK历史
+
+**API返回格式：**
+```json
+{
+  "id": 1,
+  "student_a_id": 16,
+  "student_b_id": 17,
+  "topic": "速算比赛",
+  "status": "finished",
+  "winner_id": 16,
+  "created_at": "2025-11-26T10:00:00Z"
+}
+```
+
+#### 5. badges 表（勋章定义）
+
+```sql
+CREATE TABLE badges (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(100) NOT NULL UNIQUE,
+  icon VARCHAR(10),                           -- emoji图标
+  description TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**关联表：student_badges（勋章授予记录）**
+```sql
+CREATE TABLE student_badges (
+  id SERIAL PRIMARY KEY,
+  student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  badge_id INTEGER NOT NULL REFERENCES badges(id) ON DELETE CASCADE,
+  awarded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(student_id, badge_id)
+);
+```
+
+**数据流程：**
+1. 系统预定义勋章 → `badges` 表
+2. 教师端授予勋章 → `student_badges` 表
+3. GET /api/students 返回学生及其勋章列表
+4. 大屏端和个人信息页显示勋章
+
+**API返回格式：**
+```json
+{
+  "id": 1,
+  "name": "学霸之星",
+  "icon": "⭐",
+  "description": "学习表现突出",
+  "awarded_at": "2025-11-26T10:30:00Z"
+}
+```
+
+#### 6. habits 表（习惯）
+
+```sql
+CREATE TABLE habits (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  icon VARCHAR(10),
+  points INTEGER DEFAULT 1,                   -- 打卡奖励积分
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**关联表：habit_checkins（打卡记录）**
+```sql
+CREATE TABLE habit_checkins (
+  id SERIAL PRIMARY KEY,
+  habit_id INTEGER NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
+  student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(habit_id, student_id, DATE(checked_at))  -- 每天只能打卡一次
+);
+```
+
+#### 7. score_history 表（积分历史）
+
+```sql
+CREATE TABLE score_history (
+  id SERIAL PRIMARY KEY,
+  student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  points_change INTEGER NOT NULL,             -- 积分变化（正数或负数）
+  reason VARCHAR(200),                        -- 变化原因
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**用途：**
+- 记录所有积分变化
+- 用于积分历史查询和统计
+- 支持积分回溯和审计
+
+---
+
+## 系统架构
+
+### 项目简介
 
 星途成长方舟是一个课堂管理系统，包含教师端（ClassHero）和大屏显示端（Bigscreen）两个应用。系统通过实时数据同步将教师端的学生积分更新自动反映在大屏显示上。
 
-## 系统架构
+### 通信架构
 
 ```
 ┌─────────────────┐         ┌──────────────────┐         ┌──────────────┐
@@ -23,7 +526,891 @@
 
 ---
 
-## 问题与解决方案
+## API接口文档
+
+### API基础信息
+
+- **Base URL**: `http://localhost:3000/api` (开发环境)
+- **生产URL**: `https://esboimzbkure.sealosbja.site/api`
+- **认证方式**: 暂无（内部系统）
+- **数据格式**: JSON
+- **字符编码**: UTF-8
+
+### 统一响应格式
+
+```json
+{
+  "success": true,
+  "data": {},
+  "timestamp": "2025-11-26T10:00:00Z"
+}
+```
+
+### 学生管理 API
+
+#### GET /api/students
+获取所有学生列表（包含勋章信息）
+
+**请求参数：** 无
+
+**响应示例：**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 16,
+      "name": "吴逸桐",
+      "score": 150,
+      "avatar_url": "https://api.dicebear.com/7.x/avataaars/svg?seed=吴逸桐",
+      "total_exp": 500,
+      "level": 3,
+      "team_id": 1,
+      "class_name": "一年级1班",
+      "badges": [
+        {
+          "id": 1,
+          "name": "学霸之星",
+          "icon": "⭐",
+          "awarded_at": "2025-11-26T10:30:00Z"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**SQL查询：**
+```sql
+SELECT
+  s.*,
+  COALESCE(
+    json_agg(
+      json_build_object(
+        'id', b.id,
+        'name', b.name,
+        'icon', b.icon,
+        'awarded_at', sb.awarded_at
+      )
+    ) FILTER (WHERE b.id IS NOT NULL),
+    '[]'
+  ) as badges
+FROM students s
+LEFT JOIN student_badges sb ON s.id = sb.student_id
+LEFT JOIN badges b ON sb.badge_id = b.id
+GROUP BY s.id
+ORDER BY s.score DESC
+```
+
+#### POST /api/students
+创建新学生
+
+**请求体：**
+```json
+{
+  "name": "张三",
+  "avatar_url": "https://...",
+  "team_id": 1,
+  "class_name": "一年级1班"
+}
+```
+
+#### PUT /api/students/:id
+更新学生信息（包括积分）
+
+**请求体：**
+```json
+{
+  "score": 160,
+  "total_exp": 520
+}
+```
+
+**副作用：**
+- 自动记录积分变化到 `score_history` 表
+- 触发 WebSocket 事件 `student:updated`
+
+#### DELETE /api/students/:id
+删除学生
+
+**级联删除：**
+- `student_badges` 记录
+- `task_assignments` 记录
+- `challenge_participants` 记录
+- `habit_checkins` 记录
+- `score_history` 记录
+
+### 任务管理 API
+
+#### GET /api/tasks
+获取所有任务（包含执行人信息）
+
+**响应示例：**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "title": "完成数学作业",
+      "description": "第3章练习题",
+      "exp_value": 50,
+      "assigned_to": [
+        {
+          "student_id": 16,
+          "student_name": "吴逸桐",
+          "student_avatar": "https://..."
+        }
+      ]
+    }
+  ]
+}
+```
+
+**SQL查询：**
+```sql
+SELECT
+  t.id,
+  t.title,
+  t.description,
+  t.exp_value,
+  COALESCE(
+    json_agg(
+      json_build_object(
+        'student_id', ta.student_id,
+        'student_name', s.name,
+        'student_avatar', s.avatar_url
+      )
+    ) FILTER (WHERE ta.student_id IS NOT NULL),
+    '[]'
+  ) as assigned_to
+FROM tasks t
+LEFT JOIN task_assignments ta ON t.id = ta.task_id
+LEFT JOIN students s ON ta.student_id = s.id
+GROUP BY t.id
+ORDER BY t.id DESC
+```
+
+#### POST /api/tasks
+创建新任务
+
+**请求体：**
+```json
+{
+  "title": "完成数学作业",
+  "description": "第3章练习题",
+  "exp_value": 50,
+  "assigned_to": [16, 17]  // 学生ID数组
+}
+```
+
+**处理流程：**
+1. 插入任务到 `tasks` 表
+2. 为每个学生插入记录到 `task_assignments` 表
+3. 返回完整任务信息（包含执行人）
+
+#### DELETE /api/tasks/:id
+删除任务
+
+**级联删除：**
+- `task_assignments` 记录自动删除（ON DELETE CASCADE）
+
+### 挑战管理 API
+
+#### GET /api/challenges
+获取所有挑战（包含挑战者和参与者信息）
+
+**响应示例：**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "title": "背古诗挑战",
+      "description": "背诵《静夜思》",
+      "status": "active",
+      "result": null,
+      "challenger_id": 16,
+      "challenger_name": "吴逸桐",
+      "challenger_avatar": "https://...",
+      "reward_points": 20,
+      "reward_exp": 10,
+      "participants": [
+        {"student_id": 16},
+        {"student_id": 17}
+      ]
+    }
+  ]
+}
+```
+
+**SQL查询：**
+```sql
+SELECT
+  c.id,
+  c.title,
+  c.description,
+  c.status,
+  c.result,
+  c.reward_points,
+  c.reward_exp,
+  c.challenger_id,
+  s.name as challenger_name,
+  s.avatar_url as challenger_avatar,
+  COALESCE(
+    json_agg(
+      json_build_object('student_id', cp.student_id)
+    ) FILTER (WHERE cp.student_id IS NOT NULL),
+    '[]'
+  ) as participants
+FROM challenges c
+LEFT JOIN students s ON c.challenger_id = s.id
+LEFT JOIN challenge_participants cp ON c.id = cp.challenge_id
+GROUP BY c.id, s.name, s.avatar_url
+ORDER BY c.created_at DESC
+```
+
+#### POST /api/challenges
+创建新挑战
+
+**请求体：**
+```json
+{
+  "title": "背古诗挑战",
+  "description": "背诵《静夜思》",
+  "status": "active",
+  "reward_points": 20,
+  "reward_exp": 10,
+  "challenger_id": 16,
+  "participant_ids": [16, 17]
+}
+```
+
+**处理流程：**
+1. 插入挑战到 `challenges` 表（包含 `challenger_id`）
+2. 为每个参与者插入记录到 `challenge_participants` 表
+3. 查询完整挑战信息（JOIN students 获取挑战者信息）
+4. 触发 WebSocket 事件 `challenge:created`
+5. 返回完整挑战信息
+
+#### PUT /api/challenges/:id
+更新挑战状态和结果
+
+**请求体：**
+```json
+{
+  "status": "completed",
+  "result": "success"
+}
+```
+
+### PK管理 API
+
+#### GET /api/pk-matches
+获取所有PK记录
+
+**响应示例：**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "student_a_id": 16,
+      "student_b_id": 17,
+      "topic": "速算比赛",
+      "status": "finished",
+      "winner_id": 16,
+      "created_at": "2025-11-26T10:00:00Z"
+    }
+  ]
+}
+```
+
+#### POST /api/pk-matches
+创建新PK
+
+**请求体：**
+```json
+{
+  "student_a_id": 16,
+  "student_b_id": 17,
+  "topic": "速算比赛"
+}
+```
+
+#### PUT /api/pk-matches/:id
+更新PK结果
+
+**请求体：**
+```json
+{
+  "status": "finished",
+  "winner_id": 16
+}
+```
+
+### 勋章管理 API
+
+#### GET /api/badges
+获取所有勋章定义
+
+**响应示例：**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "name": "学霸之星",
+      "icon": "⭐",
+      "description": "学习表现突出"
+    }
+  ]
+}
+```
+
+#### POST /api/award-badge
+授予勋章给学生
+
+**请求体：**
+```json
+{
+  "student_id": 16,
+  "badge_id": 1
+}
+```
+
+**处理流程：**
+1. 插入记录到 `student_badges` 表
+2. 触发 WebSocket 事件 `badge:awarded`
+3. 返回授予结果
+
+### 习惯管理 API
+
+#### GET /api/habits
+获取所有习惯
+
+**响应示例：**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "name": "早睡早起",
+      "icon": "🌙",
+      "points": 5
+    }
+  ]
+}
+```
+
+#### POST /api/habit-checkin
+习惯打卡
+
+**请求体：**
+```json
+{
+  "habit_id": 1,
+  "student_ids": [16, 17]
+}
+```
+
+**处理流程：**
+1. 为每个学生插入打卡记录到 `habit_checkins` 表
+2. 更新学生积分（增加 `habit.points`）
+3. 记录积分变化到 `score_history` 表
+4. 触发 WebSocket 事件 `student:updated`
+
+### 队伍管理 API
+
+#### GET /api/teams
+获取所有队伍
+
+**响应示例：**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "name": "新星前锋",
+      "color": "bg-cyan-500",
+      "text_color": "text-cyan-400"
+    }
+  ]
+}
+```
+
+---
+
+## 前端架构
+
+### 项目结构
+
+```
+mobile/                          # 前端项目根目录
+├── App.tsx                      # 主应用入口（教师端）
+├── index.tsx                    # React入口
+├── types.ts                     # TypeScript类型定义
+├── constants.ts                 # 常量定义
+├── pages/                       # 页面组件
+│   ├── ClassManage.tsx          # 班级管理页（核心页面）
+│   ├── Habits.tsx               # 习惯打卡页
+│   └── ...
+├── components/                  # 通用组件
+│   ├── StudentCard.tsx          # 学生卡片
+│   └── ...
+├── services/                    # API服务层
+│   └── api.ts                   # API请求封装
+├── bigscreen/                   # 大屏端应用
+│   ├── main.tsx                 # 大屏端入口
+│   ├── components/              # 大屏端组件
+│   │   ├── PKBoardCard.tsx      # PK榜单卡片
+│   │   ├── ChallengeArenaCard.tsx  # 挑战擂台卡片
+│   │   ├── HonorBadgesCard.tsx  # 荣誉勋章卡片
+│   │   └── ...
+│   ├── services/                # 大屏端服务
+│   │   └── sealosService.ts     # API和WebSocket服务
+│   └── types.ts                 # 大屏端类型定义
+├── dist/                        # 构建产物
+└── vite.config.ts               # Vite配置
+```
+
+### 核心类型定义
+
+#### mobile/types.ts
+
+```typescript
+// 学生类型
+export interface Student {
+  id: string;
+  name: string;
+  score: number;
+  avatar?: string;
+  totalExp?: number;
+  level?: number;
+  teamId?: string;
+  groupId?: string;
+  className?: string;
+  badges?: Array<{
+    id: number;
+    name: string;
+    icon: string;
+    awarded_at: string;
+  }>;
+  badgeHistory?: StudentBadgeRecord[];
+  taskHistory?: StudentTaskRecord[];
+  challengeHistory?: StudentChallengeRecord[];
+  pkHistory?: StudentPKRecord[];
+}
+
+// 任务类型
+export interface Task {
+  id: string;
+  title: string;
+  description?: string;
+  expValue: number;
+  assignedTo: string[];  // 学生ID数组
+  createdAt?: string;
+}
+
+// 挑战类型
+export interface Challenge {
+  id: string;
+  title: string;
+  desc: string;
+  status: 'active' | 'completed';
+  result?: 'success' | 'fail';
+  participants: string[];  // 参与者ID数组
+  challengerId?: string;   // 挑战者ID
+  challengerName?: string; // 挑战者姓名
+  challengerAvatar?: string;  // 挑战者头像
+  rewardPoints: number;
+  rewardExp?: number;
+  date?: string;
+}
+
+// PK类型
+export interface PKMatch {
+  id: string;
+  studentA: string;
+  studentB: string;
+  topic: string;
+  status: 'pending' | 'finished';
+  winnerId?: string;
+  date?: string;
+}
+
+// 习惯类型
+export interface Habit {
+  id: string;
+  name: string;
+  icon: string;
+  points: number;
+}
+```
+
+### 数据流向
+
+#### 教师端数据流
+
+```
+用户操作 → 组件事件 → API请求 → 后端处理 → 数据库更新
+                                    ↓
+                              WebSocket广播
+                                    ↓
+                              大屏端接收更新
+```
+
+**示例：修改学生积分**
+
+```typescript
+// 1. 用户在ClassManage.tsx中修改积分
+const handleScoreChange = async (studentId: string, newScore: number) => {
+  // 2. 发送API请求
+  const response = await fetch(`/api/students/${studentId}`, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ score: newScore })
+  });
+
+  // 3. 更新本地状态
+  if (response.ok) {
+    setStudents(prev => prev.map(s =>
+      s.id === studentId ? {...s, score: newScore} : s
+    ));
+  }
+};
+
+// 4. 后端处理（server.js）
+app.put('/api/students/:id', async (req, res) => {
+  const { score } = req.body;
+
+  // 更新数据库
+  await pool.query('UPDATE students SET score = $1 WHERE id = $2', [score, id]);
+
+  // 广播WebSocket事件
+  wss.clients.forEach(client => {
+    client.send(JSON.stringify({
+      type: 'student:updated',
+      payload: { id, score }
+    }));
+  });
+});
+
+// 5. 大屏端接收（bigscreen/main.tsx）
+// 通过HTTP轮询（每2秒）自动获取最新数据
+useEffect(() => {
+  const pollStudents = async () => {
+    const res = await fetch('/api/students');
+    const data = await res.json();
+    setStudents(data.data);
+  };
+
+  const interval = setInterval(pollStudents, 2000);
+  return () => clearInterval(interval);
+}, []);
+```
+
+#### 大屏端数据流
+
+```
+HTTP轮询（2s） → GET /api/students → 数据比较 → 状态更新 → UI重渲染
+                                         ↓
+                                    数据排序和计算
+                                         ↓
+                              生成PK/挑战/勋章数据
+```
+
+**关键实现：**
+
+```typescript
+// bigscreen/main.tsx
+useEffect(() => {
+  let lastData = JSON.stringify([]);
+
+  const pollStudents = async () => {
+    const res = await fetch('/api/students');
+    const data = await res.json();
+
+    // 数据变化检测
+    const newData = JSON.stringify(data.data);
+    if (lastData !== newData) {
+      lastData = newData;
+      setStudents(data.data);
+    }
+  };
+
+  pollStudents();
+  const interval = setInterval(pollStudents, 2000);
+  return () => clearInterval(interval);
+}, []);
+
+// 根据学生数据生成PK配对
+const generatedPks = useMemo(() => {
+  // 按积分排序
+  const sorted = [...students].sort((a, b) => b.total_points - a.total_points);
+
+  // 生成PK配对
+  const pks = [];
+  for (let i = 0; i < Math.min(6, Math.floor(sorted.length / 2)); i++) {
+    pks.push({
+      id: `pk-${i}`,
+      student_a: sorted[i * 2].id,
+      student_b: sorted[i * 2 + 1].id,
+      topic: ['背古诗', '速算', '英语拼写'][i % 3]
+    });
+  }
+  return pks;
+}, [students]);
+```
+
+### 状态管理
+
+#### 教师端状态（App.tsx）
+
+```typescript
+const [students, setStudents] = useState<Student[]>([]);
+const [tasks, setTasks] = useState<Task[]>([]);
+const [challenges, setChallenges] = useState<Challenge[]>([]);
+const [pkMatches, setPkMatches] = useState<PKMatch[]>([]);
+const [habits, setHabits] = useState<Habit[]>([]);
+const [teams, setTeams] = useState<Team[]>([]);
+
+// 自动生成学生历史记录
+useEffect(() => {
+  setStudents(prevStudents => prevStudents.map(student => {
+    // 生成任务历史
+    const taskHistory = tasks
+      .filter(t => t.assignedTo?.includes(student.id))
+      .map(t => ({...}));
+
+    // 生成挑战历史
+    const challengeHistory = challenges
+      .filter(c => c.participants.includes(student.id))
+      .map(c => ({...}));
+
+    // 生成PK历史
+    const pkHistory = pkMatches
+      .filter(pk => pk.studentA === student.id || pk.studentB === student.id)
+      .map(pk => ({...}));
+
+    return { ...student, taskHistory, challengeHistory, pkHistory };
+  }));
+}, [tasks, challenges, pkMatches]);
+```
+
+#### 大屏端状态（bigscreen/main.tsx）
+
+```typescript
+const [students, setStudents] = useState<Student[]>([]);
+const [challenges, setChallenges] = useState<Challenge[]>([]);
+const [teams, setTeams] = useState<Team[]>([]);
+
+// 计算派生数据
+const generatedPks = useMemo(() => {...}, [students]);
+const generatedChallenges = useMemo(() => {...}, [students]);
+const generatedBadges = useMemo(() => {...}, [students]);
+```
+
+---
+
+## 实时通信机制
+
+### WebSocket事件类型
+
+| 事件类型 | 触发时机 | 数据格式 |
+|---------|---------|---------|
+| `student:updated` | 学生信息更新 | `{id, name, score, ...}` |
+| `challenge:created` | 创建新挑战 | `{id, title, challenger_name, ...}` |
+| `pk:created` | 创建新PK | `{id, student_a_id, student_b_id, ...}` |
+| `badge:awarded` | 授予勋章 | `{student_id, badge_id, ...}` |
+
+### WebSocket服务端实现
+
+```javascript
+// server.js
+const wss = new WebSocket.Server({ server });
+
+// 广播函数
+function broadcast(type, payload) {
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify({
+        type,
+        payload,
+        timestamp: new Date().toISOString()
+      }));
+    }
+  });
+}
+
+// 示例：创建挑战时广播
+app.post('/api/challenges', async (req, res) => {
+  // ... 创建挑战逻辑
+
+  broadcast('challenge:created', challengeData);
+
+  res.json({ success: true, data: challengeData });
+});
+```
+
+### 大屏端HTTP轮询机制
+
+由于Sealos反向代理不支持WebSocket，大屏端使用HTTP轮询替代：
+
+```typescript
+// bigscreen/main.tsx
+useEffect(() => {
+  let lastData = JSON.stringify([]);
+
+  const pollStudents = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/students`);
+      const data = await res.json();
+
+      // 使用JSON字符串比较检测数据变化
+      const newData = JSON.stringify(data.data);
+      if (lastData !== newData) {
+        lastData = newData;
+        setStudents(data.data);
+        setWsConnected(true);
+      }
+    } catch (error) {
+      console.error('Polling error:', error);
+      setWsConnected(false);
+    }
+  };
+
+  pollStudents();
+  const interval = setInterval(pollStudents, 2000);  // 2秒轮询
+
+  return () => clearInterval(interval);
+}, []);
+```
+
+**轮询参数选择：**
+- **间隔时间**: 2000ms（2秒）
+- **选择原因**:
+  - 足够频繁，用户感知实时性
+  - 不会对服务器造成过载
+  - 平衡性能和用户体验
+
+**数据变化检测：**
+- 使用 `JSON.stringify()` 全量比较
+- 简洁高效，准确检测任何数据变化
+- 性能可接受（JSON.stringify很快）
+
+---
+
+## 部署架构
+
+### 文件结构
+
+```
+/home/devbox/project/arkok/
+├── server.js                    # 后端服务器
+├── package.json                 # 后端依赖
+├── .env                         # 环境变量
+├── entrypoint.sh                # 启动脚本
+├── create-schema.js             # 数据库初始化
+├── seed-students.js             # 测试数据
+├── mobile/                      # 前端源码
+│   ├── App.tsx
+│   ├── bigscreen/
+│   └── ...
+├── public/                      # 静态文件（构建产物）
+│   ├── index.html               # 教师端入口
+│   ├── index.css                # 全局样式
+│   ├── assets/                  # 教师端资源
+│   │   ├── main-*.js
+│   │   └── index-*.js
+│   └── bigscreen/               # 大屏端资源
+│       ├── index.html           # 大屏端入口
+│       └── assets/
+│           ├── index-*.js
+│           └── bigscreen-*.js
+└── node_modules/
+```
+
+### 路由映射
+
+| URL路径 | 文件路径 | 说明 |
+|---------|---------|------|
+| `/admin` | `public/index.html` | 教师端/管理端 |
+| `/screen` | `public/bigscreen/index.html` | 大屏显示端 |
+| `/student` | `public/index.html` | 学生端（预留） |
+| `/assets/*` | `public/assets/*` | 教师端静态资源 |
+| `/bigscreen/*` | `public/bigscreen/*` | 大屏端静态资源 |
+| `/api/*` | Express API | 后端API接口 |
+
+### 构建流程
+
+```bash
+# 1. 构建前端
+cd /home/devbox/project/arkok/mobile
+npm run build
+
+# 2. 复制构建产物到public目录
+cp -r dist/* ../public/
+
+# 3. 验证文件
+ls -la ../public/
+ls -la ../public/bigscreen/
+
+# 4. 重启服务器
+cd ..
+./entrypoint.sh
+```
+
+### 环境变量
+
+```bash
+# .env
+DATABASE_URL=postgresql://user:password@host:port/database
+DB_HOST=growark-postgresql.ns-bg6fgs6y.svc
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=kngwb5cb
+DB_NAME=postgres
+NODE_ENV=development
+PORT=3000
+```
+
+### 启动流程
+
+```bash
+#!/bin/bash
+# entrypoint.sh
+
+# 1. 加载环境变量
+source .env
+
+# 2. 检查数据库连接
+echo "Testing database connection..."
+
+# 3. 启动服务器
+NODE_ENV=development node server.js
+```
+
+### 访问地址
+
+**开发环境：**
+- 教师端: http://localhost:3000/admin
+- 大屏端: http://localhost:3000/screen
+- API: http://localhost:3000/api
+
+**生产环境（Sealos）：**
+- 教师端: https://esboimzbkure.sealosbja.site/admin
+- 大屏端: https://esboimzbkure.sealosbja.site/screen
+- API: https://esboimzbkure.sealosbja.site/api
+
+---
+
+## 历史问题与解决方案
 
 ### 问题 1: WebSocket 连接失败
 
@@ -542,7 +1929,7 @@ ls -la /home/devbox/project/public/
 
 ```bash
 # API 地址配置
-REACT_APP_API_URL=https://xysrxgjnpycd.sealoshzh.site/api
+REACT_APP_API_URL=https://esboimzbkure.sealosbja.site/api
 ```
 
 ---
@@ -559,7 +1946,7 @@ REACT_APP_API_URL=https://xysrxgjnpycd.sealoshzh.site/api
 
 ```javascript
 // 在浏览器控制台测试 API
-fetch('https://xysrxgjnpycd.sealoshzh.site/api/students')
+fetch('https://esboimzbkure.sealosbja.site/api/students')
   .then(r => r.json())
   .then(d => console.log(d))
 ```
