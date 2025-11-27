@@ -766,6 +766,41 @@ app.put('/api/pk-matches/:id', async (req, res) => {
 });
 
 /**
+ * 删除 PK 比赛记录
+ */
+app.delete('/api/pk-matches/:id', async (req, res) => {
+  try {
+    const pkId = parseInt(req.params.id);
+
+    const result = await pool.query(
+      'DELETE FROM pk_matches WHERE id = $1 RETURNING id',
+      [pkId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'PK match not found',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'PK match deleted successfully',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error deleting PK match:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
  * 创建任务（支持指定执行人）
  */
 app.post('/api/tasks', async (req, res) => {
@@ -1080,6 +1115,41 @@ app.put('/api/badges/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('Error updating badge:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * 删除勋章授予记录
+ */
+app.delete('/api/badge-grants/:id', async (req, res) => {
+  try {
+    const grantId = parseInt(req.params.id);
+
+    const result = await pool.query(
+      'DELETE FROM student_badges WHERE id = $1 RETURNING id',
+      [grantId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Badge grant not found',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Badge grant deleted successfully',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error deleting badge grant:', error);
     res.status(500).json({
       success: false,
       error: error.message,

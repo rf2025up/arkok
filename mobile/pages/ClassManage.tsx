@@ -122,6 +122,14 @@ const ClassManage: React.FC<ClassManageProps> = ({
   const [challengeToDelete, setChallengeToDelete] = useState<string | null>(null);
   const challengePressTimerRef = React.useRef<number | null>(null);
 
+  // 长按删除勋章授予记录
+  const [badgeGrantToDelete, setBadgeGrantToDelete] = useState<number | null>(null);
+  const badgeGrantPressTimerRef = React.useRef<number | null>(null);
+
+  // 长按删除PK记录
+  const [pkToDelete, setPkToDelete] = useState<string | null>(null);
+  const pkPressTimerRef = React.useRef<number | null>(null);
+
   // -- Logic for Detail Modal --
   const getStudentChallenges = (studentId: string) => {
       return challenges.filter(c => c.participants.includes(studentId));
@@ -462,6 +470,95 @@ const ClassManage: React.FC<ClassManageProps> = ({
       if (challengePressTimerRef.current) {
           clearTimeout(challengePressTimerRef.current);
           challengePressTimerRef.current = null;
+      }
+  };
+
+  // 删除勋章授予记录
+  const handleDeleteBadgeGrant = async (grantId: number) => {
+      try {
+          const protocol = window.location.protocol;
+          const host = window.location.host;
+          const apiUrl = `${protocol}//${host}/api`;
+
+          const response = await fetch(`${apiUrl}/badge-grants/${grantId}`, {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' }
+          });
+
+          if (!response.ok) {
+              console.error('Failed to delete badge grant:', response.statusText);
+              return;
+          }
+
+          // 从本地状态中删除
+          setBadgeGrants(prev => prev.filter(g => g.id !== grantId));
+          setBadgeGrantToDelete(null);
+
+          // 显示成功反馈
+          setBadgeFeedback({
+              show: true,
+              message: '✅ 勋章授予记录已删除！'
+          });
+          setTimeout(() => {
+              setBadgeFeedback({ show: false, message: '' });
+          }, 2000);
+      } catch (error) {
+          console.error('Error deleting badge grant:', error);
+      }
+  };
+
+  // 长按开始 - 勋章授予记录
+  const handleBadgeGrantPressStart = (grantId: number) => {
+      badgeGrantPressTimerRef.current = window.setTimeout(() => {
+          setBadgeGrantToDelete(grantId);
+      }, 500); // 500ms 长按触发
+  };
+
+  // 长按结束 - 勋章授予记录
+  const handleBadgeGrantPressEnd = () => {
+      if (badgeGrantPressTimerRef.current) {
+          clearTimeout(badgeGrantPressTimerRef.current);
+          badgeGrantPressTimerRef.current = null;
+      }
+  };
+
+  // 删除PK记录
+  const handleDeletePK = async (pkId: string) => {
+      try {
+          const protocol = window.location.protocol;
+          const host = window.location.host;
+          const apiUrl = `${protocol}//${host}/api`;
+
+          const response = await fetch(`${apiUrl}/pk-matches/${pkId}`, {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' }
+          });
+
+          if (!response.ok) {
+              console.error('Failed to delete PK match:', response.statusText);
+              return;
+          }
+
+          // 从本地状态中删除
+          setPkMatches(prev => prev.filter(pk => pk.id !== pkId));
+          setPkToDelete(null);
+      } catch (error) {
+          console.error('Error deleting PK match:', error);
+      }
+  };
+
+  // 长按开始 - PK记录
+  const handlePKPressStart = (pkId: string) => {
+      pkPressTimerRef.current = window.setTimeout(() => {
+          setPkToDelete(pkId);
+      }, 500); // 500ms 长按触发
+  };
+
+  // 长按结束 - PK记录
+  const handlePKPressEnd = () => {
+      if (pkPressTimerRef.current) {
+          clearTimeout(pkPressTimerRef.current);
+          pkPressTimerRef.current = null;
       }
   };
 
@@ -1291,7 +1388,15 @@ const ClassManage: React.FC<ClassManageProps> = ({
                                     .map(pk => {
                                       const isWinner = pk.result === 'win';
                                       return (
-                                        <div key={pk.id} className="flex justify-between items-center bg-white p-3 rounded-xl border border-gray-100 shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
+                                        <div
+                                          key={pk.id}
+                                          className="flex justify-between items-center bg-white p-3 rounded-xl border border-gray-100 shadow-[0_2px_4px_rgba(0,0,0,0.02)]"
+                                          onTouchStart={() => handlePKPressStart(pk.pkId)}
+                                          onTouchEnd={handlePKPressEnd}
+                                          onMouseDown={() => handlePKPressStart(pk.pkId)}
+                                          onMouseUp={handlePKPressEnd}
+                                          onMouseLeave={handlePKPressEnd}
+                                        >
                                             <div className="flex items-center space-x-3 flex-1">
                                                 <span className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full ${isWinner ? 'bg-yellow-100 text-yellow-600' : 'bg-gray-100 text-gray-400'}`}>
                                                     {isWinner ? '胜' : '败'}
@@ -2019,7 +2124,15 @@ const ClassManage: React.FC<ClassManageProps> = ({
               <div className="max-h-[300px] overflow-y-auto space-y-2">
                 {badgeGrants.length > 0 ? (
                   badgeGrants.map((grant) => (
-                    <div key={grant.id} className="flex items-center justify-between bg-gray-50 p-2 rounded-xl">
+                    <div
+                      key={grant.id}
+                      className="flex items-center justify-between bg-gray-50 p-2 rounded-xl"
+                      onTouchStart={() => handleBadgeGrantPressStart(grant.id)}
+                      onTouchEnd={handleBadgeGrantPressEnd}
+                      onMouseDown={() => handleBadgeGrantPressStart(grant.id)}
+                      onMouseUp={handleBadgeGrantPressEnd}
+                      onMouseLeave={handleBadgeGrantPressEnd}
+                    >
                       <div className="flex flex-col flex-1">
                         <span className="text-xs font-bold text-gray-700">{grant.badge_name}</span>
                         <span className="text-[10px] text-gray-500">{grant.student_name}</span>
@@ -2096,6 +2209,58 @@ const ClassManage: React.FC<ClassManageProps> = ({
               </button>
               <button
                 onClick={() => handleDeleteChallenge(challengeToDelete)}
+                className="flex-1 py-2.5 rounded-xl bg-red-500 text-white font-bold text-sm"
+              >
+                删除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Badge Grant Delete Confirmation */}
+      {badgeGrantToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 animate-in zoom-in-95">
+            <h3 className="font-bold text-lg text-gray-800 mb-3 text-center">确认删除</h3>
+            <p className="text-sm text-gray-600 mb-6 text-center">
+              确定要删除这条勋章授予记录吗？此操作无法撤销。
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setBadgeGrantToDelete(null)}
+                className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-bold text-sm"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => handleDeleteBadgeGrant(badgeGrantToDelete)}
+                className="flex-1 py-2.5 rounded-xl bg-red-500 text-white font-bold text-sm"
+              >
+                删除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PK Delete Confirmation */}
+      {pkToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 animate-in zoom-in-95">
+            <h3 className="font-bold text-lg text-gray-800 mb-3 text-center">确认删除</h3>
+            <p className="text-sm text-gray-600 mb-6 text-center">
+              确定要删除这条PK记录吗？此操作无法撤销。
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setPkToDelete(null)}
+                className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-bold text-sm"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => handleDeletePK(pkToDelete)}
                 className="flex-1 py-2.5 rounded-xl bg-red-500 text-white font-bold text-sm"
               >
                 删除
