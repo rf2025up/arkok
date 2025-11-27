@@ -520,6 +520,7 @@ function App() {
 
           setChallenges(prev => prev.map(c => {
               if (c.id === id) {
+                  // 只有成功时才调用 handleUpdateScore 加积分和经验
                   if (result === 'success' && c.status === 'active') {
                       handleUpdateScore(c.participants, c.rewardPoints, `挑战成功: ${c.title}`, c.rewardExp);
                   }
@@ -536,15 +537,21 @@ function App() {
                   title: ch.title,
                   result,
                   points: result === 'success' ? ch.rewardPoints : 0,
-                  exp: result === 'success' ? ch.rewardExp : undefined,
+                  exp: result === 'success' ? ch.rewardExp : 0,
                   date: new Date().toISOString()
                 };
-                const bonusMin = Math.floor((ch.rewardExp || 0) * 0.10);
-                const bonusMax = Math.floor((ch.rewardExp || 0) * 0.30);
-                const bonus = result === 'success' ? Math.floor(Math.random() * (bonusMax - bonusMin + 1)) + bonusMin : 0;
-                const newExp = s.exp + bonus;
-                const newLevel = calcLevelFromExp(newExp);
-                return { ...s, exp: newExp, level: newLevel, challengeHistory: [ ...(s.challengeHistory || []), rec ] };
+                // 只有成功时才加经验值
+                if (result === 'success') {
+                  const bonusMin = Math.floor((ch.rewardExp || 0) * 0.10);
+                  const bonusMax = Math.floor((ch.rewardExp || 0) * 0.30);
+                  const bonus = Math.floor(Math.random() * (bonusMax - bonusMin + 1)) + bonusMin;
+                  const newExp = s.exp + bonus;
+                  const newLevel = calcLevelFromExp(newExp);
+                  return { ...s, exp: newExp, level: newLevel, challengeHistory: [ ...(s.challengeHistory || []), rec ] };
+                } else {
+                  // 失败时不加经验值，只记录历史
+                  return { ...s, challengeHistory: [ ...(s.challengeHistory || []), rec ] };
+                }
               }
               return s;
             }));
@@ -684,7 +691,19 @@ function App() {
               setStudents(prev => prev.map(s => {
                 if (s.id === studentId) {
                   const rec = { id: `${badgeId}-${date}`, badgeId, name: badge.name, date };
-                  return { ...s, badgeHistory: [ ...(s.badgeHistory || []), rec ] };
+                  // 添加勋章到 badges 数组（用于显示）
+                  const newBadge = {
+                    id: badgeId,
+                    name: badge.name,
+                    description: badge.description,
+                    icon: badge.icon,
+                    awarded_at: date
+                  };
+                  return {
+                    ...s,
+                    badges: [ ...(s.badges || []), newBadge ],
+                    badgeHistory: [ ...(s.badgeHistory || []), rec ]
+                  };
                 }
                 return s;
               }));

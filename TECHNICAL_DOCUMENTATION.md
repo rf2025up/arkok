@@ -3663,3 +3663,236 @@ useEffect(() => {
 - 优化个人信息页UI布局
 - 修复大屏PK页面切换逻辑
 - 完善数据流程说明
+
+---
+
+## 2025年11月27日更新记录
+
+### 更新概述
+本次更新主要优化了勋章系统、挑战系统、PK系统的显示和交互逻辑，修复了多个数据同步问题。
+
+### 1. 手机端首页学生排序优化
+**问题：** 学生显示顺序不明确
+**解决方案：**
+- 文件：`mobile/pages/Home.tsx:23`
+- 修改：按经验值（exp）降序排序
+- 实现：`.sort((a, b) => (b.exp || 0) - (a.exp || 0))`
+
+### 2. 大屏端PK页滚动逻辑优化
+**问题：** PK页面来回切换，用户体验不佳
+**解决方案：**
+- 文件：`mobile/bigscreen/components/PKBoardCard.tsx:59-64`
+- 修改：实现无限循环滚动（从右往左）
+- 技术：使用复制第一页到末尾的技巧，滚动到复制页后瞬间跳回真正的第一页
+- 速度：每页4秒
+
+### 3. 学生头像样式更新
+**问题：** 原有头像风格不符合需求
+**解决方案：**
+- 使用自定义头像图片（1024.jpg）
+- 文件位置：`public/assets/student-avatar.jpg`
+- 数据库更新：所有28个学生的avatar_url统一指向自定义头像
+- 风格：扁平风格Q版小学生形象
+
+### 4. 挑战系统完整修复
+
+#### 4.1 挑战失败不加经验和积分
+**问题：** 点击"失败"按钮后仍然加分
+**解决方案：**
+- 文件：`mobile/App.tsx:542-553`
+- 修改：只有`result === 'success'`时才加经验和积分
+- 失败时只记录历史，不加任何奖励
+
+#### 4.2 挑战状态正确显示
+**问题：** 大屏端无论成功失败都显示"成功"
+**解决方案：**
+- 后端API：`server.js:578` - GET /api/challenges 返回 result 字段
+- 后端API：`server.js:620-621` - PUT /api/challenges/:id 更新 result 字段
+- 大屏端：`mobile/bigscreen/main.tsx:78-91` - 根据 status 和 result 综合判断显示状态
+
+#### 4.3 挑战者名称显示
+**问题：** 手机端进行中的挑战显示"未指定挑战者"
+**解决方案：**
+- 文件：`mobile/pages/ClassManage.tsx:392-394`
+- 修改：从API返回数据中提取 challengerId、challengerName、challengerAvatar
+
+#### 4.4 个人信息页挑战记录显示优化
+**问题：** 失败的挑战仍显示"+积分"和"+经验"
+**解决方案：**
+- 文件：`mobile/pages/ClassManage.tsx:1328-1337`
+- 修改：只有成功的挑战才显示奖励标签
+
+### 5. 勋章系统全面优化
+
+#### 5.1 勋章授予后显示问题
+**问题：** 授予勋章后，手机端和大屏端不显示
+**解决方案：**
+- 后端API：`server.js:155` - GET /api/students 返回完整勋章信息（包含description）
+- 前端：`mobile/App.tsx:694-706` - handleBadgeGrant 更新学生的 badges 数组
+- 大屏端：`mobile/bigscreen/main.tsx:134-141` - 正确映射勋章数据
+- 大屏端：`mobile/bigscreen/main.tsx:286` - 使用真实学生数据而非模拟数据
+
+#### 5.2 勋章创建持久化
+**问题：** 新创建的勋章刷新后消失
+**解决方案：**
+- 后端API：`server.js:962-992` - 添加 POST /api/badges 接口
+- 前端：`mobile/pages/ClassManage.tsx:725-752` - 调用API保存到数据库
+- 反馈：使用绿色弹窗显示"✅ 勋章「XX」创建成功！"
+
+#### 5.3 勋章编辑功能
+**问题：** 勋章编辑后大屏端不更新
+**解决方案：**
+- 后端API：`server.js:1015-1032` - PUT /api/badges/:id 更新勋章信息
+- 前端：`mobile/pages/ClassManage.tsx:815-822` - 显示成功反馈
+- 大屏端：每2秒轮询自动更新（通过JOIN badges表获取最新数据）
+
+#### 5.4 勋章授予记录
+**新功能：** 添加勋章授予记录区域
+**实现：**
+- 后端API：`server.js:1015-1032` - GET /api/badge-grants 返回最近一个月记录
+- 前端：`mobile/pages/ClassManage.tsx:1988-2007` - 显示勋章名称、授予人、日期
+- 位置：在勋章授予和勋章编辑之间
+- 排序：按日期降序（最新在前）
+- 刷新：授予勋章后自动刷新记录
+
+#### 5.5 个人信息页勋章卡片简化
+**优化：** 简化勋章卡片显示
+**修改：**
+- 文件：`mobile/pages/ClassManage.tsx:1146-1153`
+- 删除icon显示
+- 删除"授予"两字
+- 只显示勋章名称和日期
+- 缩小卡片间距
+
+#### 5.6 大屏端勋章显示优化
+**优化：** 勋章按日期排序，滚动速度调整
+**修改：**
+- 文件：`mobile/bigscreen/components/HonorBadgesCard.tsx:59-64`
+- 排序：按awarded_at降序（最新的在前）
+- 速度：从120秒调整为240秒（4分钟完成一个循环）
+- 清理：删除无用的模拟数据生成代码（generatedBadges）
+
+### 6. 新增API接口
+
+#### 6.1 创建勋章
+```
+POST /api/badges
+Body: { name, description, icon }
+Response: { success, data: { id, name, description, icon } }
+```
+
+#### 6.2 更新勋章
+```
+PUT /api/badges/:id
+Body: { name, description }
+Response: { success, data: { id, name, description, icon } }
+```
+
+#### 6.3 获取勋章授予记录
+```
+GET /api/badge-grants
+Response: { success, data: [{ id, badge_name, student_name, awarded_at }] }
+```
+
+### 7. 数据库变更
+
+#### 7.1 勋章表（badges）
+- 已有字段：id, name, description, icon, created_at
+- 说明：description字段现在在所有API中返回
+
+#### 7.2 学生勋章关联表（student_badges）
+- 已有字段：id, student_id, badge_id, awarded_at
+- 说明：通过JOIN badges表获取最新勋章信息
+
+#### 7.3 挑战表（challenges）
+- 已有字段：id, title, description, status, result, challenger_id, reward_points, reward_exp
+- 说明：result字段（success/fail）现在正确更新和返回
+
+### 8. 前端架构优化
+
+#### 8.1 状态管理
+- 添加 badgeGrants 状态：存储勋章授予记录
+- 优化 students 状态：包含完整的 badges 数组
+
+#### 8.2 数据流向
+```
+勋章创建流程：
+前端表单 → POST /api/badges → 数据库 → 返回新勋章 → 更新本地状态 → 显示反馈
+
+勋章授予流程：
+前端选择 → POST /api/students/:id/badges/:badgeId → student_badges表
+         ↓
+    更新students状态（添加到badges数组）
+         ↓
+    刷新授予记录 → GET /api/badge-grants
+         ↓
+    大屏端轮询 → GET /api/students → 获取最新badges → 显示
+
+勋章编辑流程：
+前端表单 → PUT /api/badges/:id → 更新badges表 → 显示反馈
+         ↓
+    大屏端轮询 → GET /api/students → JOIN badges表 → 获取最新名称/描述
+```
+
+### 9. 用户体验优化
+
+#### 9.1 反馈机制统一
+- 勋章创建成功：绿色弹窗，2秒自动消失
+- 勋章编辑成功：绿色弹窗，2秒自动消失
+- 勋章授予成功：绿色弹窗，显示授予人数
+- 样式：与习惯打卡反馈保持一致
+
+#### 9.2 大屏端实时更新
+- 学生数据：每2秒轮询一次
+- 勋章数据：通过学生数据自动更新
+- 挑战数据：每5秒轮询一次
+- PK数据：每2秒轮询一次
+
+### 10. 代码清理
+
+#### 10.1 删除无用代码
+- 删除 generatedBadges 模拟数据生成逻辑（约40行）
+- 删除 realBadges 未使用的状态变量
+- 清理大屏端无用的勋章模拟数据
+
+#### 10.2 代码优化
+- 统一反馈显示样式
+- 优化数据映射逻辑
+- 改进错误处理
+
+### 11. 测试验证清单（2025-11-27）
+
+- [x] 手机端首页按经验值排序
+- [x] 大屏端PK页无限循环滚动（4秒/页）
+- [x] 学生头像统一为自定义图片
+- [x] 挑战失败不加经验和积分
+- [x] 挑战状态正确显示（成功/失败）
+- [x] 挑战者名称正确显示
+- [x] 个人信息页挑战记录只显示成功的奖励
+- [x] 勋章创建后保存到数据库
+- [x] 勋章授予后手机端和大屏端都显示
+- [x] 勋章编辑后大屏端自动更新
+- [x] 勋章授予记录显示最近一个月
+- [x] 个人信息页勋章卡片简化显示
+- [x] 大屏端勋章按日期排序
+- [x] 大屏端勋章滚动速度调慢
+- [x] 勋章创建/编辑成功显示绿色反馈
+
+### 12. 待实现功能
+
+- [ ] 勋章授予记录长按删除
+- [ ] PK记录长按删除
+- [ ] 更多用户交互优化
+
+---
+
+**最后更新：** 2025年11月27日 13:00
+**文档版本：** 2.5
+**作者：** Claude Code
+**更新内容：**
+- 完整记录勋章系统优化
+- 完整记录挑战系统修复
+- 添加新增API接口文档
+- 更新数据流向说明
+- 添加测试验证清单
+- 记录代码清理内容

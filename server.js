@@ -152,7 +152,7 @@ app.get('/api/students', async (req, res) => {
         s.avatar_url,
         json_object_agg(h.id::text, COALESCE(hc_count.count, 0)) as habit_stats,
         COALESCE(
-          (SELECT json_agg(json_build_object('id', b.id, 'name', b.name, 'icon', b.icon, 'awarded_at', sb.awarded_at))
+          (SELECT json_agg(json_build_object('id', b.id, 'name', b.name, 'description', b.description, 'icon', b.icon, 'awarded_at', sb.awarded_at))
            FROM student_badges sb
            JOIN badges b ON sb.badge_id = b.id
            WHERE sb.student_id = s.id),
@@ -575,6 +575,7 @@ app.get('/api/challenges', async (req, res) => {
         c.title,
         c.description,
         c.status,
+        c.result,
         c.reward_points,
         c.reward_exp,
         c.challenger_id,
@@ -616,8 +617,8 @@ app.put('/api/challenges/:id', async (req, res) => {
     const { status, result } = req.body;
 
     const updateResult = await pool.query(
-      'UPDATE challenges SET status = $1 WHERE id = $2 RETURNING id, title, description, status, reward_points, reward_exp',
-      [status || 'completed', challengeId]
+      'UPDATE challenges SET status = $1, result = $2 WHERE id = $3 RETURNING id, title, description, status, result, reward_points, reward_exp',
+      [status || 'completed', result || null, challengeId]
     );
 
     if (updateResult.rows.length === 0) {
@@ -956,6 +957,41 @@ app.post('/api/students/:student_id/badges', async (req, res) => {
 });
 
 /**
+ * 创建新勋章
+ */
+app.post('/api/badges', async (req, res) => {
+  try {
+    const { name, description, icon } = req.body;
+
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        error: 'Badge name is required',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const result = await pool.query(
+      'INSERT INTO badges (name, description, icon) VALUES ($1, $2, $3) RETURNING id, name, description, icon',
+      [name, description || '', icon || '🏆']
+    );
+
+    res.status(201).json({
+      success: true,
+      data: result.rows[0],
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error creating badge:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
  * 获取所有勋章
  */
 app.get('/api/badges', async (req, res) => {
@@ -968,6 +1004,82 @@ app.get('/api/badges', async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching badges:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * 获取勋章授予记录（最近一个月）
+ */
+app.get('/api/badge-grants', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        sb.id,
+        sb.awarded_at,
+        b.name as badge_name,
+        s.name as student_name
+      FROM student_badges sb
+      JOIN badges b ON sb.badge_id = b.id
+      JOIN students s ON sb.student_id = s.id
+      WHERE sb.awarded_at >= NOW() - INTERVAL '1 month'
+      ORDER BY sb.awarded_at DESC
+    `);
+    res.json({
+      success: true,
+      data: result.rows,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error fetching badge grants:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * 更新勋章信息
+ */
+app.put('/api/badges/:id', async (req, res) => {
+  try {
+    const badgeId = parseInt(req.params.id);
+    const { name, description } = req.body;
+
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        error: 'Badge name is required',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const result = await pool.query(
+      'UPDATE badges SET name = $1, description = $2 WHERE id = $3 RETURNING id, name, description, icon',
+      [name, description || '', badgeId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Badge not found',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    res.json({
+      success: true,
+      data: result.rows[0],
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error updating badge:', error);
     res.status(500).json({
       success: false,
       error: error.message,

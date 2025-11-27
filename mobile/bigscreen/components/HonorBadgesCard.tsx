@@ -48,14 +48,20 @@ const HonorBadgesCard: React.FC<HonorBadgesCardProps> = ({ students }) => {
   const studentsWithBadges = useMemo(() => {
     return students
       .filter(s => s.badges && s.badges.length > 0)
-      .flatMap(student => 
+      .flatMap(student =>
         student.badges.map(badge => ({
           student,
           badge,
           // Unique key for each awarded badge
-          key: `${student.id}-${badge.id}` 
+          key: `${student.id}-${badge.id}`
         }))
-      );
+      )
+      .sort((a, b) => {
+        // 按授予日期排序，最新的在前
+        const dateA = new Date(a.badge.awardedDate || 0).getTime();
+        const dateB = new Date(b.badge.awardedDate || 0).getTime();
+        return dateB - dateA;
+      });
   }, [students]);
 
   if (studentsWithBadges.length === 0) {
@@ -82,7 +88,7 @@ const HonorBadgesCard: React.FC<HonorBadgesCardProps> = ({ students }) => {
                 to { transform: translateX(-50%); }
             }
             .animate-scroll {
-                animation: scroll 120s linear infinite;
+                animation: scroll 240s linear infinite;
             }
             .pause {
                 animation-play-state: paused;

@@ -26,7 +26,6 @@ const App: React.FC = () => {
   const [wsConnected, setWsConnected] = useState(false)
   const [realPks, setRealPks] = useState<any[]>([])
   const [realChallenges, setRealChallenges] = useState<any[]>([])
-  const [realBadges, setRealBadges] = useState<any[]>([])
 
   // 初始加载队伍数据
   useEffect(() => {
@@ -75,23 +74,31 @@ const App: React.FC = () => {
         const data = await res.json()
         if (data.success && Array.isArray(data.data)) {
           setRealChallenges(data.data.map((c: any) => {
-            // 状态映射：API返回英文，组件需要中文
-            const statusMap: Record<string, string> = {
-              'active': '进行中',
-              'completed': '成功',
-              'failed': '失败',
-              'pending': '进行中'
+            // 状态映射：根据 status 和 result 确定显示状态
+            let displayStatus = '进行中'
+            if (c.status === 'active' || c.status === 'pending') {
+              displayStatus = '进行中'
+            } else if (c.status === 'completed') {
+              // 如果已完成，根据 result 字段判断成功还是失败
+              if (c.result === 'success') {
+                displayStatus = '成功'
+              } else if (c.result === 'fail') {
+                displayStatus = '失败'
+              } else {
+                displayStatus = '成功' // 默认为成功（兼容旧数据）
+              }
             }
+
             return {
               id: String(c.id),
               title: c.title,
               description: c.description,
-              status: statusMap[c.status] || '进行中',
+              status: displayStatus,
               reward_points: c.reward_points,
               reward_exp: c.reward_exp,
               challenger: {
                 name: c.challenger_name || '未知挑战者',
-                avatar: c.challenger_avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=system'
+                avatar: c.challenger_avatar || 'https://api.dicebear.com/7.x/notionists/svg?seed=system&backgroundColor=ffffff'
               }
             }
           }))
@@ -122,8 +129,15 @@ const App: React.FC = () => {
             team_id: `t${s.team_id}`,
             total_exp: s.total_exp || 0,
             total_points: s.score || 0,
-            avatar_url: s.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(s.name)}`,
-            badges: []
+            avatar_url: s.avatar_url || `https://api.dicebear.com/7.x/notionists/svg?seed=${encodeURIComponent(s.name)}&backgroundColor=ffffff`,
+            badges: (s.badges || []).map((b: any) => ({
+              id: String(b.id),
+              name: b.name,
+              description: b.description || '',
+              icon: b.icon || '🏆',
+              image: s.avatar_url || `https://api.dicebear.com/7.x/notionists/svg?seed=${encodeURIComponent(s.name)}&backgroundColor=ffffff`,
+              awardedDate: b.awarded_at
+            }))
           }))
 
           // 比较数据是否改变
@@ -195,57 +209,13 @@ const App: React.FC = () => {
         description: `完成 ${[5, 10, 3, 2, 1, 8][i % 6]} 个任务`,
         challenger: {
           name: student.name,
-          avatar: student.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${student.name}`
+          avatar: student.avatar_url || `https://api.dicebear.com/7.x/notionists/svg?seed=${student.name}&backgroundColor=ffffff`
         },
         status: statuses[i % statuses.length]
       })
     }
 
     return challenges
-  }, [students])
-
-  // 生成勋章数据
-  const generatedBadges = useMemo(() => {
-    if (students.length === 0) return []
-
-    return [...students].map((s, idx) => {
-      const badges = []
-
-      if (idx % 3 === 0) {
-        badges.push({
-          id: `b1-${idx}`,
-          name: '学霸之星',
-          description: '学习表现突出',
-          image: s.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${s.name}`,
-          icon: '⭐',
-          awardedDate: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString()
-        })
-      }
-
-      if (idx % 4 === 0) {
-        badges.push({
-          id: `b2-${idx}`,
-          name: '挑战先锋',
-          description: '完成挑战最多',
-          image: s.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${s.name}`,
-          icon: '🛡️',
-          awardedDate: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString()
-        })
-      }
-
-      if (idx % 5 === 0) {
-        badges.push({
-          id: `b3-${idx}`,
-          name: '全勤奖',
-          description: '本月无缺席',
-          image: s.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${s.name}`,
-          icon: '🏃',
-          awardedDate: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString()
-        })
-      }
-
-      return { ...s, badges }
-    })
   }, [students])
 
   return (
@@ -268,7 +238,7 @@ const App: React.FC = () => {
       </main>
       <div className="mt-4 grid grid-cols-1 gap-6 flex-shrink-0">
         <div className="col-span-1">
-          <HonorBadgesCard students={generatedBadges} />
+          <HonorBadgesCard students={students} />
         </div>
       </div>
     </div>

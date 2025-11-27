@@ -17,10 +17,10 @@ interface HomeProps {
 const Home: React.FC<HomeProps> = ({ students, onUpdateScore, scorePresets, categoryNames, identity='teacher', classes=[], teacherClass }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
-  const [scoringStudent, setScoringStudent] = useState<Student | null>(null); 
+  const [scoringStudent, setScoringStudent] = useState<Student | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
-  const visibleStudents = identity==='principal' ? students : students.filter(s => s.className === (teacherClass || classes[0] || ''));
+  const visibleStudents = (identity==='principal' ? students : students.filter(s => s.className === (teacherClass || classes[0] || ''))).sort((a, b) => (b.exp || 0) - (a.exp || 0));
 
   const toggleSelection = (id: string) => {
     const newSet = new Set(selectedIds);

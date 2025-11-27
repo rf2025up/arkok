@@ -319,7 +319,7 @@ async function createSchema() {
             team.id,
             Math.floor(Math.random() * 1000) + 50,
             Math.floor(Math.random() * 15) + 1,
-            `https://api.dicebear.com/7.x/avataaars/svg?seed=${i}`,
+            `https://api.dicebear.com/7.x/notionists/svg?seed=${i}&backgroundColor=ffffff`,
             student.id
           ]
         );

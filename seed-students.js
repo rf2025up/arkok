@@ -70,7 +70,7 @@ async function seedDatabase() {
       const score = Math.floor(Math.random() * 100) + 50; // Random score 50-150
       const total_exp = Math.floor(Math.random() * 500) + 100; // Random exp 100-600
       const level = Math.floor(total_exp / 100) + 1; // Calculate level
-      const avatar_url = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}`;
+      const avatar_url = `https://api.dicebear.com/7.x/notionists/svg?seed=${encodeURIComponent(name)}&backgroundColor=ffffff`;
       const class_idx = i % classes.length;
       const class_name = classes[class_idx];
 

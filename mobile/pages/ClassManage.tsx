@@ -89,6 +89,8 @@ const ClassManage: React.FC<ClassManageProps> = ({
   const [taskAssigneeSelectId, setTaskAssigneeSelectId] = useState('');
   const [editBadgeId, setEditBadgeId] = useState('');
   const [editBadgeName, setEditBadgeName] = useState('');
+  const [editBadgeDesc, setEditBadgeDesc] = useState('');
+  const [badgeGrants, setBadgeGrants] = useState<Array<{id: number, badge_name: string, student_name: string, awarded_at: string}>>([]);
   // 默认战队配置
   const DEFAULT_TEAMS = ['天才少年', '学霸无敌', '超能少年'];
   const [teams, setTeams] = useState<Array<{id: string, name: string}>>(
@@ -154,6 +156,25 @@ const ClassManage: React.FC<ClassManageProps> = ({
       for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
       return out;
   };
+
+  // 加载勋章授予记录
+  React.useEffect(() => {
+    const loadBadgeGrants = async () => {
+      try {
+        const protocol = window.location.protocol;
+        const host = window.location.host;
+        const apiUrl = `${protocol}//${host}/api`;
+        const response = await fetch(`${apiUrl}/badge-grants`);
+        const data = await response.json();
+        if (data.success && Array.isArray(data.data)) {
+          setBadgeGrants(data.data);
+        }
+      } catch (error) {
+        console.error('Error loading badge grants:', error);
+      }
+    };
+    loadBadgeGrants();
+  }, []);
 
   // 同步 selectedStudent 与 students 的更新（包括 habitStats）
   React.useEffect(() => {
@@ -388,6 +409,9 @@ const ClassManage: React.FC<ClassManageProps> = ({
                       desc: data.data.description,
                       status: data.data.status,
                       participants: participantIds,
+                      challengerId: data.data.challenger_id ? String(data.data.challenger_id) : undefined,
+                      challengerName: data.data.challenger_name || undefined,
+                      challengerAvatar: data.data.challenger_avatar || undefined,
                       rewardPoints: data.data.reward_points,
                       rewardExp: data.data.reward_exp,
                       date: new Date().toISOString()
@@ -657,7 +681,7 @@ const ClassManage: React.FC<ClassManageProps> = ({
       }
   };
 
-  const handleGrantBadgeSubmit = () => {
+  const handleGrantBadgeSubmit = async () => {
       if(grantBadgeForm.badgeId && grantBadgeForm.studentIds.length) {
           const badge = badges.find(b => b.id === grantBadgeForm.badgeId);
           const studentCount = grantBadgeForm.studentIds.length;
@@ -672,6 +696,20 @@ const ClassManage: React.FC<ClassManageProps> = ({
           setTimeout(() => {
               setBadgeFeedback({ show: false, message: '' });
           }, 2000);
+
+          // 刷新勋章授予记录
+          try {
+              const protocol = window.location.protocol;
+              const host = window.location.host;
+              const apiUrl = `${protocol}//${host}/api`;
+              const response = await fetch(`${apiUrl}/badge-grants`);
+              const data = await response.json();
+              if (data.success && Array.isArray(data.data)) {
+                  setBadgeGrants(data.data);
+              }
+          } catch (error) {
+              console.error('Error refreshing badge grants:', error);
+          }
       }
   };
 
@@ -698,28 +736,94 @@ const ClassManage: React.FC<ClassManageProps> = ({
 
               const icon = BADGE_ICONS[Math.floor(Math.random() * BADGE_ICONS.length)];
 
-              // Note: The API doesn't have a badge creation endpoint yet
-              // For now, we'll create it locally
-              // TODO: Add POST /api/badges endpoint to backend when needed
-
-              onAddBadge({
-                  id: `b-${Date.now()}`,
-                  name: newBadgeForm.name,
-                  description: newBadgeForm.desc || '表现优异',
-                  icon: icon
+              // 调用 API 创建勋章并保存到数据库
+              const response = await fetch(`${apiUrl}/badges`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                      name: newBadgeForm.name,
+                      description: newBadgeForm.desc || '表现优异',
+                      icon: icon
+                  })
               });
-              setNewBadgeForm({ name: '', desc: '' });
+
+              if (!response.ok) {
+                  console.error('Failed to create badge:', response.statusText);
+                  alert('创建勋章失败，请重试');
+                  return;
+              }
+
+              const data = await response.json();
+              if (data.success && data.data) {
+                  onAddBadge({
+                      id: String(data.data.id),
+                      name: data.data.name,
+                      description: data.data.description,
+                      icon: data.data.icon
+                  });
+                  setNewBadgeForm({ name: '', desc: '' });
+
+                  // 显示成功反馈
+                  setBadgeFeedback({
+                      show: true,
+                      message: `✅ 勋章「${data.data.name}」创建成功！`
+                  });
+                  setTimeout(() => {
+                      setBadgeFeedback({ show: false, message: '' });
+                  }, 2000);
+              }
           } catch (error) {
               console.error('Error creating badge:', error);
           }
       }
   }
 
-  const handleSaveBadgeRename = () => {
+  const handleSaveBadgeEdit = async () => {
       if (editBadgeId && editBadgeName.trim()) {
-          setBadges(prev => prev.map(b => b.id === editBadgeId ? { ...b, name: editBadgeName } : b));
-          setEditBadgeId('');
-          setEditBadgeName('');
+          try {
+              const protocol = window.location.protocol;
+              const host = window.location.host;
+              const apiUrl = `${protocol}//${host}/api`;
+
+              // 调用 API 更新勋章
+              const response = await fetch(`${apiUrl}/badges/${editBadgeId}`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                      name: editBadgeName.trim(),
+                      description: editBadgeDesc.trim()
+                  })
+              });
+
+              if (!response.ok) {
+                  console.error('Failed to update badge:', response.statusText);
+                  alert('更新勋章失败，请重试');
+                  return;
+              }
+
+              // 更新本地状态
+              setBadges(prev => prev.map(b => b.id === editBadgeId ? {
+                  ...b,
+                  name: editBadgeName.trim(),
+                  description: editBadgeDesc.trim()
+              } : b));
+
+              setEditBadgeId('');
+              setEditBadgeName('');
+              setEditBadgeDesc('');
+
+              // 显示成功反馈
+              setBadgeFeedback({
+                  show: true,
+                  message: `✅ 勋章「${editBadgeName}」更新成功！`
+              });
+              setTimeout(() => {
+                  setBadgeFeedback({ show: false, message: '' });
+              }, 2000);
+          } catch (error) {
+              console.error('Error updating badge:', error);
+              alert('更新勋章失败，请重试');
+          }
       }
   };
 
@@ -1105,15 +1209,12 @@ const ClassManage: React.FC<ClassManageProps> = ({
                                return (
                                  <div className="bg-gray-50 p-3 rounded-2xl border border-gray-100">
                                    {badgeItems.length > 0 ? (
-                                     <div className="grid grid-cols-2 gap-3">
+                                     <div className="grid grid-cols-2 gap-2">
                                        {badgeItems.map((b, i) => (
                                          <div key={`${b.id}-${i}`} className="flex flex-col p-2 rounded-lg bg-white border border-gray-200 shadow-sm">
-                                           <div className="flex items-center gap-2 mb-1">
-                                             <span className="text-lg">{b.icon}</span>
-                                             <span className="text-xs font-bold text-gray-700">{b.name}</span>
-                                           </div>
+                                           <span className="text-xs font-bold text-gray-700">{b.name}</span>
                                            <div className="text-[10px] text-gray-400 mt-1">
-                                             授予日期: {formatDate((b as any).awarded_at)}
+                                             {formatDate((b as any).awarded_at)}
                                            </div>
                                          </div>
                                        ))}
@@ -1287,12 +1388,16 @@ const ClassManage: React.FC<ClassManageProps> = ({
                                                  </div>
                                                  <span className="text-[10px] text-gray-400">{new Date(rec.date).toLocaleDateString()}</span>
                                              </div>
-                                             <div className="flex flex-col items-end gap-0.5">
-                                               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-50 text-orange-600">积分 + {rec.points}</span>
-                                               {rec.exp && rec.exp > 0 && (
-                                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">经验 + {rec.exp}</span>
-                                               )}
-                                             </div>
+                                             {rec.result === 'success' && (
+                                               <div className="flex flex-col items-end gap-0.5">
+                                                 {rec.points > 0 && (
+                                                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-50 text-orange-600">积分 + {rec.points}</span>
+                                                 )}
+                                                 {rec.exp && rec.exp > 0 && (
+                                                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">经验 + {rec.exp}</span>
+                                                 )}
+                                               </div>
+                                             )}
                                          </div>
                                        ))
                                  ) : (
@@ -1910,25 +2015,43 @@ const ClassManage: React.FC<ClassManageProps> = ({
               </div>
             </div>
             <div className="bg-white rounded-3xl p-4 shadow-sm">
-              <h3 className="text-sm font-bold text-gray-800 mb-3">勋章库</h3>
-              <div className="flex flex-wrap gap-2">
-                {badges.map((b)=> (
-                  <div key={b.id} className="px-3 py-2 rounded-xl bg-gray-50 text-sm text-gray-700 border flex items-center gap-2">
-                    <span className="text-lg">{b.icon}</span>
-                    <span>{b.name}</span>
-                  </div>
-                ))}
+              <h3 className="text-sm font-bold text-gray-800 mb-3">勋章授予记录</h3>
+              <div className="max-h-[300px] overflow-y-auto space-y-2">
+                {badgeGrants.length > 0 ? (
+                  badgeGrants.map((grant) => (
+                    <div key={grant.id} className="flex items-center justify-between bg-gray-50 p-2 rounded-xl">
+                      <div className="flex flex-col flex-1">
+                        <span className="text-xs font-bold text-gray-700">{grant.badge_name}</span>
+                        <span className="text-[10px] text-gray-500">{grant.student_name}</span>
+                      </div>
+                      <span className="text-[10px] text-gray-400">
+                        {new Date(grant.awarded_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center text-xs text-gray-400 py-3">暂无授予记录</div>
+                )}
               </div>
             </div>
             <div className="bg-white rounded-3xl p-4 shadow-sm">
-              <h3 className="text-sm font-bold text-gray-800 mb-3">勋章名称修改</h3>
-              <div className="grid grid-cols-3 gap-2">
-                <select value={editBadgeId} onChange={e=>setEditBadgeId(e.target.value)} className="p-2 rounded-xl bg-gray-50 text-sm outline-none">
+              <h3 className="text-sm font-bold text-gray-800 mb-3">勋章编辑</h3>
+              <div className="space-y-3">
+                <select value={editBadgeId} onChange={e=>{
+                  const badgeId = e.target.value;
+                  setEditBadgeId(badgeId);
+                  const badge = badges.find(b => b.id === badgeId);
+                  if (badge) {
+                    setEditBadgeName(badge.name);
+                    setEditBadgeDesc(badge.description || '');
+                  }
+                }} className="w-full p-2 rounded-xl bg-gray-50 text-sm outline-none">
                   <option value="">选择勋章</option>
                   {badges.map(b=> (<option key={b.id} value={b.id}>{b.icon} {b.name}</option>))}
                 </select>
-                <input value={editBadgeName} onChange={e=>setEditBadgeName(e.target.value)} placeholder="新名称" className="p-2 rounded-xl bg-gray-50 text-sm outline-none" />
-                <button onClick={handleSaveBadgeRename} className="p-2 rounded-xl bg-primary text-white text-sm font-bold">保存</button>
+                <input value={editBadgeName} onChange={e=>setEditBadgeName(e.target.value)} placeholder="勋章名称" className="w-full p-2 rounded-xl bg-gray-50 text-sm outline-none" />
+                <input value={editBadgeDesc} onChange={e=>setEditBadgeDesc(e.target.value)} placeholder="勋章描述" className="w-full p-2 rounded-xl bg-gray-50 text-sm outline-none" />
+                <button onClick={handleSaveBadgeEdit} className="w-full p-2 rounded-xl bg-primary text-white text-sm font-bold">保存修改</button>
               </div>
             </div>
           </div>

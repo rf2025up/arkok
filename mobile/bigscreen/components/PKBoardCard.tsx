@@ -24,6 +24,7 @@ const PKBoardCard: React.FC<PKBoardCardProps> = ({ pks, teamsMap, students = [] 
   const containerRef = useRef<HTMLDivElement>(null)
   const [itemsPerPage, setItemsPerPage] = useState(6)
   const [page, setPage] = useState(0)
+  const [enableTransition, setEnableTransition] = useState(true)
 
   const pages = useMemo(() => {
     const arr: PKMatch[][] = []
@@ -31,9 +32,16 @@ const PKBoardCard: React.FC<PKBoardCardProps> = ({ pks, teamsMap, students = [] 
     return arr.length > 0 ? arr : [[]]
   }, [pks, itemsPerPage])
 
+  // 创建无限循环的页面数组：在末尾添加第一页的副本
+  const infinitePages = useMemo(() => {
+    if (pages.length <= 1) return pages
+    return [...pages, pages[0]]
+  }, [pages])
+
   // 当pks改变时重置page
   useEffect(() => {
     setPage(0)
+    setEnableTransition(true)
   }, [pks])
 
   useEffect(() => {
@@ -52,13 +60,25 @@ const PKBoardCard: React.FC<PKBoardCardProps> = ({ pks, teamsMap, students = [] 
 
   useEffect(() => {
     if (pages.length <= 1) return
-    const t = setInterval(() => setPage(p => {
-      // 到达最后一页后停止，不再循环
-      if (p >= pages.length - 1) return p
-      return p + 1
-    }), 3000) // 每页固定3秒
+    const t = setInterval(() => {
+      setPage(p => {
+        const nextPage = p + 1
+        // 如果到达复制的第一页（最后一个位置）
+        if (nextPage >= infinitePages.length - 1) {
+          // 先滑动到复制的第一页（有动画）
+          setTimeout(() => {
+            // 然后瞬间跳回真正的第一页（无动画）
+            setEnableTransition(false)
+            setPage(0)
+            setTimeout(() => setEnableTransition(true), 50)
+          }, 700) // 等待动画完成
+          return nextPage
+        }
+        return nextPage
+      })
+    }, 4000) // 每页固定4秒
     return () => clearInterval(t)
-  }, [pages.length])
+  }, [pages.length, infinitePages.length])
 
   return (
     <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl shadow-lg h-full flex flex-col">
@@ -67,8 +87,8 @@ const PKBoardCard: React.FC<PKBoardCardProps> = ({ pks, teamsMap, students = [] 
         {pks.length === 0 ? (
           <div className="h-full flex items-center justify-center text-slate-500">暂无 PK 数据</div>
         ) : (
-          <div className="flex h-full transition-transform duration-700 ease-in-out" style={{ transform: `translateX(-${page * 100}%)` }}>
-            {pages.map((group, idx) => (
+          <div className={`flex h-full ${enableTransition ? 'transition-transform duration-700 ease-in-out' : ''}`} style={{ transform: `translateX(-${page * 100}%)` }}>
+            {infinitePages.map((group, idx) => (
               <ul key={idx} className="w-full flex-shrink-0 h-full space-y-2">
                 {group.map(item => {
                   const studentA = studentsMap.get(String(item.student_a))
